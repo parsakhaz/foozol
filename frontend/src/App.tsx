@@ -1,0 +1,436 @@
+import { useState, useEffect } from 'react';
+import { useIPCEvents } from './hooks/useIPCEvents';
+import { useNotifications } from './hooks/useNotifications';
+import { useResizable } from './hooks/useResizable';
+import { useHotkey } from './hooks/useHotkey';
+import { Sidebar } from './components/Sidebar';
+import { SessionView } from './components/SessionView';
+import { PromptHistoryModal } from './components/PromptHistoryModal';
+import Help from './components/Help';
+import Welcome from './components/Welcome';
+import AnalyticsConsentDialog from './components/AnalyticsConsentDialog';
+import { AboutDialog } from './components/AboutDialog';
+import { UpdateDialog } from './components/UpdateDialog';
+import { MainProcessLogger } from './components/MainProcessLogger';
+import { ErrorDialog } from './components/ErrorDialog';
+import { PermissionDialog } from './components/PermissionDialog';
+import { DiscordPopup } from './components/DiscordPopup';
+import { ResumeSessionsDialog } from './components/ResumeSessionsDialog';
+import { useErrorStore } from './stores/errorStore';
+import { useSessionStore } from './stores/sessionStore';
+import { useConfigStore } from './stores/configStore';
+import { API } from './utils/api';
+import { createVisibilityAwareInterval } from './utils/performanceUtils';
+import { ContextMenuProvider } from './contexts/ContextMenuContext';
+import { TokenTest } from './components/TokenTest';
+import { CommandPalette } from './components/CommandPalette';
+import type { VersionUpdateInfo, PermissionInput } from './types/session';
+import type { ResumableSession } from '../../shared/types/panels';
+
+// Type for IPC response
+interface IPCResponse<T = unknown> {
+  success: boolean;
+  data?: T;
+  error?: string;
+}
+
+interface PermissionRequest {
+  id: string;
+  sessionId: string;
+  toolName: string;
+  input: PermissionInput;
+  timestamp: number;
+}
+
+function App() {
+  const [isHelpOpen, setIsHelpOpen] = useState(false);
+  const [isWelcomeOpen, setIsWelcomeOpen] = useState(false);
+  const [isAnalyticsConsentOpen, setIsAnalyticsConsentOpen] = useState(false);
+  const [hasCheckedAnalyticsConsent, setHasCheckedAnalyticsConsent] = useState(false);
+  const [isAboutOpen, setIsAboutOpen] = useState(false);
+  const [isUpdateDialogOpen, setIsUpdateDialogOpen] = useState(false);
+  const [updateVersionInfo, setUpdateVersionInfo] = useState<VersionUpdateInfo | null>(null);
+  const [currentPermissionRequest, setCurrentPermissionRequest] = useState<PermissionRequest | null>(null);
+  const [isDiscordOpen, setIsDiscordOpen] = useState(false);
+  const [hasCheckedWelcome, setHasCheckedWelcome] = useState(false);
+  const [isPromptHistoryOpen, setIsPromptHistoryOpen] = useState(false);
+  const [isTokenTestOpen, setIsTokenTestOpen] = useState(false);
+  const [isCommandPaletteOpen, setIsCommandPaletteOpen] = useState(false);
+  const [resumableSessions, setResumableSessions] = useState<ResumableSession[]>([]);
+  const [isResumeDialogOpen, setIsResumeDialogOpen] = useState(false);
+  const { currentError, clearError } = useErrorStore();
+  const { sessions, isLoaded } = useSessionStore();
+  const { fetchConfig } = useConfigStore();
+  
+  const { width: sidebarWidth, startResize } = useResizable({
+    defaultWidth: 500,  // Increased to show git status labels without truncation
+    minWidth: 200,
+    maxWidth: 600,
+    storageKey: 'foozol-sidebar-width'
+  });
+
+  const [sidebarCollapsed, setSidebarCollapsed] = useState(() => {
+    return localStorage.getItem('foozol-sidebar-collapsed') === 'true';
+  });
+  const toggleSidebarCollapsed = () => {
+    setSidebarCollapsed(prev => {
+      const next = !prev;
+      localStorage.setItem('foozol-sidebar-collapsed', String(next));
+      return next;
+    });
+  };
+  
+  useIPCEvents();
+  const { showNotification } = useNotifications();
+
+  // Keyboard shortcuts
+  useHotkey({
+    id: 'open-prompt-history',
+    label: 'Open Prompt History',
+    keys: 'mod+p',
+    category: 'navigation',
+    action: () => setIsPromptHistoryOpen(true),
+  });
+
+  useHotkey({
+    id: 'toggle-token-test',
+    label: 'Toggle Token Test Page',
+    keys: 'mod+shift+t',
+    category: 'debug',
+    devOnly: true,
+    action: () => setIsTokenTestOpen(prev => !prev),
+  });
+
+  useHotkey({
+    id: 'open-command-palette',
+    label: 'Open Command Palette',
+    keys: 'mod+k',
+    category: 'navigation',
+    action: () => setIsCommandPaletteOpen(true),
+  });
+
+  // Load config on app startup
+  useEffect(() => {
+    fetchConfig();
+  }, [fetchConfig]);
+
+  // Check if analytics consent dialog should be shown (before other dialogs)
+  useEffect(() => {
+    if (hasCheckedAnalyticsConsent) {
+      return;
+    }
+
+    const checkAnalyticsConsent = async () => {
+      if (!window.electron?.invoke) {
+        return;
+      }
+
+      try {
+        // Check if consent has already been shown
+        const consentResult = await window.electron.invoke('preferences:get', 'analytics_consent_shown') as IPCResponse<string>;
+        const hasShownConsent = consentResult?.data === 'true';
+
+        if (!hasShownConsent) {
+          // Show consent dialog
+          setIsAnalyticsConsentOpen(true);
+        }
+      } catch (error) {
+        console.error('[App] Error checking analytics consent:', error);
+      }
+    };
+
+    setHasCheckedAnalyticsConsent(true);
+    checkAnalyticsConsent();
+  }, [hasCheckedAnalyticsConsent]);
+
+  // CRITICAL PERFORMANCE FIX: Cleanup to prevent V8 array iteration issues
+  // Uses visibility-aware interval: 60s when active, 600s when hidden
+  useEffect(() => {
+    const runCleanup = () => {
+      const store = useSessionStore.getState();
+      if (store.sessions.length > 0) {
+        store.cleanupInactiveSessions();
+      }
+    };
+
+    const cleanupDispose = createVisibilityAwareInterval(runCleanup, 60 * 1000);
+
+    // Immediate cleanup when switching sessions
+    const handleSessionSwitch = () => runCleanup();
+    window.addEventListener('session-switched', handleSessionSwitch);
+
+    // Pause animations when window is hidden to save battery
+    const handleVisibilityChange = () => {
+      document.documentElement.classList.toggle('window-hidden', document.hidden);
+    };
+    document.addEventListener('visibilitychange', handleVisibilityChange);
+
+    return () => {
+      cleanupDispose();
+      window.removeEventListener('session-switched', handleSessionSwitch);
+      document.removeEventListener('visibilitychange', handleVisibilityChange);
+    };
+  }, []);
+
+  useEffect(() => {
+    // Show welcome screen and Discord popup intelligently based on user state
+    // This should only run once when the app is loaded, not when sessions change
+    // Don't show welcome while analytics consent dialog is open
+    if (!isLoaded || hasCheckedWelcome || isAnalyticsConsentOpen) {
+      return;
+    }
+
+    const checkInitialState = async () => {
+      if (!window.electron?.invoke) {
+        return;
+      }
+
+      // Get preferences from database
+      const hideWelcomeResult = await window.electron.invoke('preferences:get', 'hide_welcome') as IPCResponse<string>;
+      const welcomeShownResult = await window.electron.invoke('preferences:get', 'welcome_shown') as IPCResponse<string>;
+      const hideDiscordResult = await window.electron.invoke('preferences:get', 'hide_discord') as IPCResponse<string>;
+      
+      const hideWelcome = hideWelcomeResult?.data === 'true';
+      const hasSeenWelcome = welcomeShownResult?.data === 'true';
+      const hideDiscord = hideDiscordResult?.data === 'true';
+      
+      
+      // Track whether we're showing the welcome screen
+      let welcomeScreenShown = false;
+      
+      // If user explicitly said "don't show again", respect that preference
+      if (hideWelcome) {
+        welcomeScreenShown = false;
+      } else {
+        try {
+          const projectsResponse = await API.projects.getAll();
+          const hasProjects = projectsResponse.success && projectsResponse.data && projectsResponse.data.length > 0;
+          // Get sessions from the API to avoid stale closure
+          const sessionsResponse = await API.sessions.getAll();
+          const hasSessions = sessionsResponse.success && sessionsResponse.data && sessionsResponse.data.length > 0;
+          
+          // Show welcome if:
+          // 1. First time user (no projects and never seen welcome)
+          // 2. Returning user with no active data (no projects and no sessions)
+          const isFirstTimeUser = !hasProjects && !hasSeenWelcome;
+          const isReturningUserWithNoData = !hasProjects && !hasSessions && hasSeenWelcome;
+          
+          
+          if (isFirstTimeUser || isReturningUserWithNoData) {
+            setIsWelcomeOpen(true);
+            welcomeScreenShown = true;
+            // Mark that welcome has been shown at least once
+            await window.electron.invoke('preferences:set', 'welcome_shown', 'true');
+          } else {
+            welcomeScreenShown = false;
+          }
+        } catch (error) {
+          console.error('Error checking initial state:', error);
+          welcomeScreenShown = false;
+        }
+      }
+      
+      // If welcome screen is not shown and Discord hasn't been hidden, check if we should show Discord popup
+      if (!welcomeScreenShown && !hideDiscord) {
+        
+        try {
+          // Get the last app open to see if Discord was already shown
+          const result = await window.electron.invoke('app:get-last-open') as IPCResponse<{ discord_shown?: boolean }>;
+          
+          if (result?.success && result.data) {
+            const lastOpen = result.data;
+            
+            // Show Discord popup if it hasn't been shown yet
+            if (!lastOpen.discord_shown) {
+              setIsDiscordOpen(true);
+              // Mark that we're showing the Discord popup
+              if (window.electron?.invoke) {
+                await window.electron.invoke('app:update-discord-shown');
+              }
+            } else {
+              // Discord already shown
+            }
+          } else {
+            // No previous app open - show Discord popup
+            setIsDiscordOpen(true);
+            // Will update discord shown status after recording app open
+          }
+        } catch (error) {
+          // Error checking Discord popup
+        }
+        
+        // Record this app open
+        if (window.electron?.invoke) {
+          await window.electron.invoke('app:record-open', hideWelcome, false);
+          
+          // If we showed Discord popup and there was no previous app open, update the status
+          const result = await window.electron.invoke('app:get-last-open') as IPCResponse<{ discord_shown?: boolean }>;
+          if (!result?.data?.discord_shown && isDiscordOpen) {
+            await window.electron.invoke('app:update-discord-shown');
+          }
+        }
+      }
+    };
+    
+    // Set the flag first to prevent re-runs
+    setHasCheckedWelcome(true);
+    checkInitialState();
+  }, [isLoaded, isAnalyticsConsentOpen]); // Also wait for analytics consent dialog to close
+
+  // Discord popup logic is now combined with welcome screen logic above
+
+  // Check for resumable sessions on startup (auto-resume feature)
+  useEffect(() => {
+    if (!isLoaded || isAnalyticsConsentOpen) return;
+
+    const checkResumableSessions = async () => {
+      try {
+        const result = await window.electronAPI.sessions.getResumable();
+        if (result.success && result.data && Array.isArray(result.data) && result.data.length > 0) {
+          setResumableSessions(result.data as ResumableSession[]);
+          setIsResumeDialogOpen(true);
+        }
+      } catch (error) {
+        console.error('[App] Failed to check for resumable sessions:', error);
+      }
+    };
+
+    checkResumableSessions();
+  }, [isLoaded, isAnalyticsConsentOpen]);
+
+  useEffect(() => {
+    // Set up permission request listener
+    const handlePermissionRequest = (...args: unknown[]) => {
+      const request = args[0] as PermissionRequest;
+      setCurrentPermissionRequest(request);
+    };
+
+    window.electron?.on('permission:request', handlePermissionRequest);
+
+    return () => {
+      window.electron?.off('permission:request', handlePermissionRequest);
+    };
+  }, []);
+
+  useEffect(() => {
+    // Set up version update listener
+    if (!window.electronAPI?.events) return;
+    
+    const handleVersionUpdate = (versionInfo: VersionUpdateInfo) => {
+      console.log('[App] Version update available:', versionInfo);
+      setUpdateVersionInfo(versionInfo);
+      setIsUpdateDialogOpen(true);
+      showNotification(
+        `🚀 Update Available - foozol v${versionInfo.latest}`,
+        'A new version of foozol is available!',
+        '/favicon.ico',
+        'version_update',
+        `update:${versionInfo.latest}` // Deduplicate by version - only track once per version
+      );
+    };
+    
+    // Set up the listener using the events API
+    const removeListener = window.electronAPI.events.onVersionUpdateAvailable(handleVersionUpdate);
+    
+    return () => {
+      if (removeListener) {
+        removeListener();
+      }
+    };
+  }, [showNotification]);
+
+  const handlePermissionResponse = async (requestId: string, behavior: 'allow' | 'deny', _updatedInput?: PermissionInput, message?: string) => {
+    try {
+      await API.permissions.respond(requestId, {
+        allow: behavior === 'allow',
+        reason: message
+      });
+      setCurrentPermissionRequest(null);
+    } catch (error) {
+      console.error('Failed to respond to permission request:', error);
+    }
+  };
+
+  return (
+    <ContextMenuProvider>
+      <div className="h-screen flex overflow-hidden bg-bg-primary">
+        <MainProcessLogger />
+        <Sidebar
+          onHelpClick={() => setIsHelpOpen(true)}
+          onAboutClick={() => setIsAboutOpen(true)}
+          onPromptHistoryClick={() => setIsPromptHistoryOpen(true)}
+          width={sidebarWidth}
+          onResize={startResize}
+          collapsed={sidebarCollapsed}
+          onToggleCollapse={toggleSidebarCollapsed}
+        />
+        <SessionView />
+        <Help isOpen={isHelpOpen} onClose={() => setIsHelpOpen(false)} />
+        <AnalyticsConsentDialog
+          isOpen={isAnalyticsConsentOpen}
+          onClose={() => setIsAnalyticsConsentOpen(false)}
+        />
+        <Welcome isOpen={isWelcomeOpen} onClose={() => setIsWelcomeOpen(false)} />
+        <AboutDialog isOpen={isAboutOpen} onClose={() => setIsAboutOpen(false)} />
+        <UpdateDialog 
+          isOpen={isUpdateDialogOpen} 
+          onClose={() => setIsUpdateDialogOpen(false)}
+          versionInfo={updateVersionInfo || undefined}
+        />
+        <ErrorDialog 
+          isOpen={!!currentError}
+          onClose={clearError}
+          title={currentError?.title}
+          error={currentError?.error || ''}
+          details={currentError?.details}
+          command={currentError?.command}
+        />
+        <PermissionDialog
+          request={currentPermissionRequest}
+          onRespond={handlePermissionResponse}
+          session={currentPermissionRequest ? sessions.find(s => s.id === currentPermissionRequest.sessionId) : undefined}
+        />
+        <DiscordPopup
+          isOpen={isDiscordOpen}
+          onClose={() => setIsDiscordOpen(false)}
+        />
+        <ResumeSessionsDialog
+          isOpen={isResumeDialogOpen}
+          onClose={() => setIsResumeDialogOpen(false)}
+          sessions={resumableSessions}
+        />
+        <PromptHistoryModal
+          isOpen={isPromptHistoryOpen}
+          onClose={() => setIsPromptHistoryOpen(false)}
+        />
+        <CommandPalette
+          isOpen={isCommandPaletteOpen}
+          onClose={() => setIsCommandPaletteOpen(false)}
+        />
+
+        {/* Token Test Modal - Toggle with Cmd/Ctrl + Shift + T (Development Only) */}
+        {isTokenTestOpen && process.env.NODE_ENV === 'development' && (
+          <div className="fixed inset-0 bg-modal-overlay flex items-center justify-center z-50 p-4 overflow-y-auto">
+            <div className="bg-bg-primary w-full max-w-6xl max-h-[90vh] overflow-y-auto rounded-lg relative border border-border-primary shadow-2xl">
+              <button
+                onClick={() => setIsTokenTestOpen(false)}
+                className="absolute top-4 right-4 p-2 hover:bg-surface-hover rounded-lg transition-colors text-text-secondary hover:text-text-primary"
+                title="Close Token Test (Cmd/Ctrl + Shift + T)"
+              >
+                <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                </svg>
+              </button>
+              <div className="absolute top-4 left-4 text-xs text-text-muted bg-surface-secondary px-2 py-1 rounded">
+                DEV ONLY
+              </div>
+              <TokenTest />
+            </div>
+          </div>
+        )}
+      </div>
+    </ContextMenuProvider>
+  );
+}
+
+export default App;
