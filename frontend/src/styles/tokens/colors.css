@@ -1,0 +1,359 @@
+/* Color Design Tokens for Crystal */
+
+:root {
+  /* Primitive Colors - Based on Tailwind's Default Palette */
+  --gray-50: rgb(249 250 251);
+  --gray-100: rgb(243 244 246);
+  --gray-200: rgb(229 231 235);
+  --gray-300: rgb(209 213 219);
+  --gray-400: rgb(156 163 175);
+  --gray-500: rgb(107 114 128);
+  --gray-600: rgb(75 85 99);
+  --gray-700: rgb(55 65 81);
+  --gray-800: rgb(31 41 55);
+  --gray-900: rgb(17 24 39);
+
+  --blue-400: rgb(96 165 250);
+  --blue-500: rgb(59 130 246);
+  --blue-600: rgb(37 99 235);
+  --blue-700: rgb(29 78 216);
+
+  --green-500: rgb(34 197 94);
+  --amber-500: rgb(245 158 11);
+  --red-500: rgb(239 68 68);
+  --red-600: rgb(220 38 38);
+
+  /* Brand Colors */
+  --discord-primary: #5865F2;
+  --discord-hover: #4752C4;
+  --discord-secondary: #7289DA;
+
+  /* Light Theme Brand Colors - Soft Lilac/Purple Accent */
+  --lilac-50: rgb(250 248 255);   /* Very light lilac for backgrounds */
+  --lilac-100: rgb(243 239 255);  /* Light lilac for surface */
+  --lilac-200: rgb(229 219 255);  /* Soft lilac for hover states */
+  --lilac-300: rgb(202 182 255);  /* Medium lilac for borders */
+  --lilac-400: rgb(167 139 250);  /* Vibrant lilac for interactive */
+  --lilac-500: rgb(139 103 246);  /* Primary brand lilac */
+  --lilac-600: rgb(124 79 243);   /* Hover state */
+  --lilac-700: rgb(104 56 235);   /* Active/pressed state */
+
+  /* GitHub Dark palette - rich OLED blacks */
+  --gh-black: rgb(1 4 9);         /* True OLED black */
+  --gh-900: rgb(13 17 23);        /* GitHub dark default bg */
+  --gh-800: rgb(22 27 34);        /* GitHub dark surface */
+  --gh-700: rgb(33 38 45);        /* GitHub dark elevated */
+  --gh-600: rgb(48 54 61);        /* GitHub dark muted border */
+  --gh-500: rgb(55 62 71);        /* GitHub dark subtle */
+
+  /* GitHub Light palette - clean whites */
+  --gh-white: rgb(255 255 255);
+  --gh-light-50: rgb(246 248 250);   /* GitHub #f6f8fa */
+  --gh-light-100: rgb(234 238 242);  /* Subtle hover */
+  --gh-light-200: rgb(208 215 222);  /* GitHub border #d0d7de */
+  --gh-light-300: rgb(178 186 194);  /* Muted border */
+}
+
+/* Dark Theme - Pure Black OLED */
+:root {
+  /* Semantic Tokens - Backgrounds */
+  --color-bg-primary: var(--gh-black);
+  --color-bg-secondary: var(--gh-900);
+  --color-bg-tertiary: var(--gh-700);
+  --color-bg-hover: var(--gh-700);
+  --color-bg-active: var(--gh-600);
+
+  /* Semantic Tokens - Surface Colors */
+  --color-surface-primary: var(--gh-900);
+  --color-surface-secondary: var(--gh-800);
+  --color-surface-hover: rgba(255, 255, 255, 0.04);
+
+  /* Semantic Tokens - Text */
+  --color-text-primary: rgb(230 237 243);        /* GitHub #e6edf3 */
+  --color-text-secondary: rgb(200 208 217);       /* Brighter secondary */
+  --color-text-tertiary: rgb(125 133 144);        /* GitHub #7d8590 */
+  --color-text-muted: rgb(110 118 129);           /* GitHub #6e7681 */
+  --color-text-disabled: rgb(72 79 88);
+
+  /* Semantic Tokens - Borders */
+  --color-border-primary: rgba(255, 255, 255, 0.08);
+  --color-border-secondary: rgba(255, 255, 255, 0.05);
+  --color-border-hover: rgba(255, 255, 255, 0.12);
+  --color-border-focus: rgb(88 166 255);
+
+  /* Semantic Tokens - Interactive */
+  --color-interactive-primary: rgb(47 129 247);   /* GitHub #2f81f7 */
+  --color-interactive-hover: rgb(56 139 253);
+  --color-interactive-active: rgb(88 166 255);
+  --color-interactive-text: rgb(88 166 255);      /* GitHub #58a6ff */
+  --color-focus-ring: rgb(88 166 255);
+  --color-interactive-rgb: 47 129 247;
+
+  /* High-contrast interactive text for dark backgrounds */
+  --color-text-interactive-on-dark: rgb(88 166 255);
+  --color-text-interactive-on-dark-hover: rgb(47 129 247);
+  --color-text-interactive-on-dark-active: rgb(88 166 255);
+  --color-text-interactive-on-dark-focus: rgb(88 166 255);
+
+  /* Interactive surface tokens */
+  --color-surface-interactive: var(--gh-800);
+  --color-surface-interactive-hover: var(--gh-700);
+  --color-interactive-surface: rgba(var(--color-interactive-rgb), 0.15);
+  --color-interactive-surface-hover: rgba(var(--color-interactive-rgb), 0.25);
+
+  /* Interactive border tokens */
+  --color-border-interactive-subtle: rgba(255, 255, 255, 0.06);
+  --color-border-interactive: rgba(255, 255, 255, 0.1);
+  --color-interactive-border: rgba(var(--color-interactive-rgb), 0.5);
+  --color-interactive-border-hover: rgba(var(--color-interactive-rgb), 0.7);
+
+  /* Interactive text tokens */
+  --color-text-interactive-muted: rgb(110 118 129);
+
+  /* Focus ring variations */
+  --color-focus-ring-subtle: rgba(var(--color-interactive-rgb), 0.4);
+
+  /* Semantic Tokens - Status */
+  --color-status-success: rgb(63 185 80);        /* GitHub #3fb950 */
+  --color-status-success-hover: rgb(46 160 67);
+  --color-status-warning: rgb(210 153 34);        /* GitHub #d29922 */
+  --color-status-warning-hover: rgb(187 128 9);
+  --color-status-error: rgb(248 81 73);           /* GitHub #f85149 */
+  --color-status-error-hover: rgb(218 54 51);
+  --color-status-info: rgb(88 166 255);
+  --color-status-neutral: rgb(110 118 129);
+
+  /* Context-Aware Text Tokens - Dark Mode */
+  --color-text-on-primary: rgb(230 237 243);
+  --color-text-on-secondary: rgb(200 208 217);
+  --color-text-on-tertiary: rgb(200 208 217);
+  --color-text-on-surface: rgb(200 208 217);
+  --color-text-on-interactive: rgb(255 255 255);
+  --color-text-on-status-success: rgb(255 255 255);
+  --color-text-on-status-warning: rgb(0 0 0);
+  --color-text-on-status-error: rgb(255 255 255);
+  --color-text-on-status-info: rgb(255 255 255);
+  --color-text-on-navigation: rgb(200 208 217);
+
+  /* Component-Specific Tokens - Buttons */
+  --color-button-primary-bg: var(--color-interactive-primary);
+  --color-button-primary-hover: var(--color-interactive-hover);
+  --color-button-primary-text: rgb(255 255 255);
+
+  --color-button-secondary-bg: var(--gh-700);
+  --color-button-secondary-hover: var(--gh-600);
+  --color-button-secondary-text: rgb(200 208 217);
+
+  --color-button-ghost-hover: var(--gh-800);
+  --color-button-ghost-text: rgb(125 133 144);
+
+  /* Component-Specific Tokens - Cards/Panels */
+  --color-card-bg: var(--gh-900);
+  --color-card-border: var(--color-border-primary);
+  --color-card-nested-bg: var(--gh-800);
+
+  /* Component-Specific Tokens - Forms */
+  --color-input-bg: var(--gh-black);
+  --color-input-border: var(--color-border-primary);
+  --color-input-focus: var(--color-focus-ring);
+  --color-input-text: var(--color-text-primary);
+  --color-input-placeholder: rgb(110 118 129);
+
+  /* Component-Specific Tokens - Modal/Dialog */
+  --color-modal-overlay: rgba(0, 0, 0, 0.6);
+  --color-modal-bg: var(--gh-900);
+
+  /* Component-Specific Tokens - Navigation/Sidebar */
+  --color-surface-navigation: var(--gh-black);
+  --color-surface-navigation-hover: var(--gh-800);
+  --color-surface-navigation-active: var(--gh-700);
+  --color-surface-navigation-selected: rgba(var(--color-interactive-rgb), 0.15);
+  --color-surface-navigation-selected-hover: rgba(var(--color-interactive-rgb), 0.2);
+
+  --color-text-navigation-primary: rgb(200 208 217);
+  --color-text-navigation-secondary: rgb(125 133 144);
+  --color-text-navigation-muted: rgb(110 118 129);
+  --color-text-navigation-selected: rgb(230 237 243);
+  --color-text-navigation-hover: rgb(230 237 243);
+  --color-text-navigation-section: rgb(110 118 129);
+  --color-text-navigation-brand: rgb(125 133 144);
+
+  --color-border-navigation: rgba(255, 255, 255, 0.06);
+  --color-divider-navigation: rgba(255, 255, 255, 0.05);
+  --color-divider-navigation-subtle: rgba(255, 255, 255, 0.03);
+
+  /* Scrollbar Colors */
+  --color-scrollbar-track: var(--gh-900);
+  --color-scrollbar-thumb: var(--gh-600);
+  --color-scrollbar-thumb-hover: var(--gh-500);
+
+  /* Terminal Colors - Dark Theme */
+  --color-terminal-bg: rgb(1 4 9);
+  --color-terminal-fg: rgb(230 237 243);
+  --color-terminal-cursor: rgb(88 166 255);
+  --color-terminal-black: rgb(1 4 9);
+  --color-terminal-red: rgb(248 81 73);
+  --color-terminal-green: rgb(63 185 80);
+  --color-terminal-yellow: rgb(210 153 34);
+  --color-terminal-blue: rgb(88 166 255);
+  --color-terminal-magenta: rgb(188 140 255);
+  --color-terminal-cyan: rgb(57 211 222);
+  --color-terminal-white: rgb(230 237 243);
+  --color-terminal-bright-black: rgb(110 118 129);
+  --color-terminal-bright-red: rgb(255 123 114);
+  --color-terminal-bright-green: rgb(86 211 100);
+  --color-terminal-bright-yellow: rgb(224 175 63);
+  --color-terminal-bright-blue: rgb(121 184 255);
+  --color-terminal-bright-magenta: rgb(210 168 255);
+  --color-terminal-bright-cyan: rgb(90 225 234);
+  --color-terminal-bright-white: rgb(255 255 255);
+}
+
+/* Light Theme - GitHub-inspired clean white */
+:root.light {
+  /* Semantic Tokens - Backgrounds */
+  --color-bg-primary: var(--gh-white);
+  --color-bg-secondary: var(--gh-light-50);
+  --color-bg-tertiary: var(--gh-light-50);
+  --color-bg-hover: var(--gh-light-100);
+  --color-bg-active: var(--gh-light-200);
+
+  /* Semantic Tokens - Surface Colors */
+  --color-surface-primary: var(--gh-white);
+  --color-surface-secondary: var(--gh-light-50);
+  --color-surface-tertiary: var(--gh-light-100);
+  --color-surface-hover: var(--gh-light-100);
+
+  /* Semantic Tokens - Text */
+  --color-text-primary: rgb(31 35 40);            /* GitHub #1f2328 */
+  --color-text-secondary: rgb(101 109 118);       /* GitHub #656d76 */
+  --color-text-tertiary: rgb(110 119 129);        /* GitHub #6e7781 */
+  --color-text-muted: rgb(156 163 175);
+  --color-text-disabled: rgb(209 213 219);
+
+  /* Semantic Tokens - Borders — visible like GitHub */
+  --color-border-primary: rgba(31, 35, 40, 0.15);
+  --color-border-secondary: rgba(31, 35, 40, 0.10);
+  --color-border-tertiary: rgba(31, 35, 40, 0.06);
+  --color-border-hover: rgba(31, 35, 40, 0.22);
+  --color-border-focus: var(--lilac-500);
+
+  /* Semantic Tokens - Interactive Elements */
+  --color-interactive: var(--lilac-500);
+  --color-interactive-primary: var(--lilac-500);
+  --color-interactive-hover: var(--lilac-600);
+  --color-interactive-active: var(--lilac-700);
+  --color-interactive-text: var(--lilac-600);
+  --color-interactive-rgb: 139 103 246;
+
+  /* Semantic Tokens - Status Colors */
+  --color-status-success: rgb(26 127 55);         /* GitHub #1a7f37 */
+  --color-status-success-hover: rgb(21 109 47);
+  --color-status-warning: rgb(154 103 0);         /* GitHub #9a6700 */
+  --color-status-warning-hover: rgb(128 84 0);
+  --color-status-error: rgb(207 34 46);           /* GitHub #cf222e */
+  --color-status-error-hover: rgb(164 14 38);
+  --color-status-info: var(--lilac-500);
+  --color-status-neutral: var(--gray-400);
+
+  /* Semantic Tokens - Special UI States */
+  --color-modal-overlay: rgba(31, 35, 40, 0.5);
+  --color-focus-ring: var(--lilac-400);
+
+  /* Light mode interactive tokens */
+  --color-surface-interactive: var(--gh-light-50);
+  --color-surface-interactive-hover: var(--gh-light-100);
+  --color-interactive-surface: var(--lilac-100);
+  --color-interactive-surface-hover: var(--lilac-200);
+  --color-border-interactive-subtle: rgba(31, 35, 40, 0.08);
+  --color-border-interactive: rgba(31, 35, 40, 0.15);
+  --color-interactive-border: var(--lilac-400);
+  --color-interactive-border-hover: var(--lilac-500);
+  --color-text-interactive-muted: var(--gray-500);
+  --color-focus-ring-subtle: rgba(var(--color-interactive-rgb), 0.4);
+
+  /* Context-Aware Text Tokens - Light Mode */
+  --color-text-on-primary: rgb(31 35 40);
+  --color-text-on-secondary: rgb(31 35 40);
+  --color-text-on-tertiary: rgb(101 109 118);
+  --color-text-on-surface: rgb(31 35 40);
+  --color-text-on-interactive: rgb(255 255 255);
+  --color-text-on-status-success: rgb(255 255 255);
+  --color-text-on-status-warning: rgb(255 255 255);
+  --color-text-on-status-error: rgb(255 255 255);
+  --color-text-on-status-info: rgb(255 255 255);
+  --color-text-on-navigation: rgb(31 35 40);
+
+  /* Component-Specific Tokens - Buttons */
+  --color-button-primary-bg: var(--lilac-500);
+  --color-button-primary-hover: var(--lilac-600);
+  --color-button-primary-text: rgb(255 255 255);
+
+  --color-button-secondary-bg: var(--gh-light-50);
+  --color-button-secondary-hover: var(--gh-light-100);
+  --color-button-secondary-text: rgb(31 35 40);
+
+  --color-button-ghost-hover: var(--gh-light-100);
+  --color-button-ghost-text: rgb(101 109 118);
+
+  /* Component-Specific Tokens - Cards/Panels */
+  --color-card-bg: var(--gh-white);
+  --color-card-border: rgba(31, 35, 40, 0.15);
+  --color-card-nested-bg: var(--gh-light-50);
+
+  /* Component-Specific Tokens - Forms */
+  --color-input-bg: var(--gh-white);
+  --color-input-border: rgba(31, 35, 40, 0.15);
+  --color-input-focus: var(--lilac-400);
+  --color-input-text: var(--color-text-primary);
+  --color-input-placeholder: var(--color-text-muted);
+
+  /* Component-Specific Tokens - Modal/Dialog */
+  --color-modal-overlay: rgba(31, 35, 40, 0.5);
+  --color-modal-bg: var(--gh-white);
+
+  /* Component-Specific Tokens - Navigation/Sidebar */
+  --color-surface-navigation: var(--gh-light-50);
+  --color-surface-navigation-hover: var(--gh-light-100);
+  --color-surface-navigation-active: var(--gh-light-200);
+  --color-surface-navigation-selected: var(--lilac-100);
+  --color-surface-navigation-selected-hover: var(--lilac-200);
+
+  --color-text-navigation-primary: rgb(31 35 40);
+  --color-text-navigation-secondary: rgb(101 109 118);
+  --color-text-navigation-muted: rgb(156 163 175);
+  --color-text-navigation-selected: var(--lilac-700);
+  --color-text-navigation-hover: rgb(31 35 40);
+  --color-text-navigation-section: rgb(101 109 118);
+  --color-text-navigation-brand: var(--lilac-600);
+
+  --color-border-navigation: rgba(31, 35, 40, 0.12);
+  --color-divider-navigation: rgba(31, 35, 40, 0.10);
+  --color-divider-navigation-subtle: rgba(31, 35, 40, 0.06);
+
+  /* Scrollbar Colors */
+  --color-scrollbar-track: var(--gh-light-50);
+  --color-scrollbar-thumb: var(--gh-light-200);
+  --color-scrollbar-thumb-hover: var(--gh-light-300);
+
+  /* Terminal Colors - Light Theme */
+  --color-terminal-bg: rgb(255 255 255);
+  --color-terminal-fg: rgb(31 35 40);
+  --color-terminal-cursor: var(--lilac-500);
+  --color-terminal-black: rgb(31 35 40);
+  --color-terminal-red: rgb(207 34 46);
+  --color-terminal-green: rgb(26 127 55);
+  --color-terminal-yellow: rgb(154 103 0);
+  --color-terminal-blue: rgb(79 70 229);
+  --color-terminal-magenta: rgb(147 51 234);
+  --color-terminal-cyan: rgb(8 145 178);
+  --color-terminal-white: rgb(249 250 251);
+  --color-terminal-bright-black: rgb(110 119 129);
+  --color-terminal-bright-red: rgb(239 68 68);
+  --color-terminal-bright-green: rgb(34 197 94);
+  --color-terminal-bright-yellow: rgb(245 158 11);
+  --color-terminal-bright-blue: rgb(99 102 241);
+  --color-terminal-bright-magenta: rgb(168 85 247);
+  --color-terminal-bright-cyan: rgb(6 182 212);
+  --color-terminal-bright-white: rgb(243 244 246);
+}
