@@ -7,13 +7,13 @@ export interface ToolPanel {
   metadata: ToolPanelMetadata;   // Creation time, position, etc.
 }
 
-export type ToolPanelType = 'terminal' | 'claude' | 'codex' | 'diff' | 'editor' | 'logs' | 'dashboard' | 'setup-tasks'; // Will expand later
+export type ToolPanelType = 'terminal' | 'claude' | 'codex' | 'diff' | 'explorer' | 'logs' | 'dashboard' | 'setup-tasks'; // Will expand later
 
 export interface ToolPanelState {
   isActive: boolean;
   isPinned?: boolean;
   hasBeenViewed?: boolean;       // Track if panel has ever been viewed
-  customState?: TerminalPanelState | ClaudePanelState | CodexPanelState | DiffPanelState | EditorPanelState | LogsPanelState | DashboardPanelState | SetupTasksPanelState | Record<string, unknown>;
+  customState?: TerminalPanelState | ClaudePanelState | CodexPanelState | DiffPanelState | ExplorerPanelState | LogsPanelState | DashboardPanelState | SetupTasksPanelState | Record<string, unknown>;
 }
 
 export interface TerminalPanelState {
@@ -103,7 +103,7 @@ export interface CodexPanelState extends BaseAIPanelState {
   };
 }
 
-export interface EditorPanelState {
+export interface ExplorerPanelState {
   filePath?: string;              // Currently open file
   content?: string;               // File content (for unsaved changes)
   isDirty?: boolean;              // Has unsaved changes
@@ -116,7 +116,7 @@ export interface EditorPanelState {
   readOnly?: boolean;             // Read-only mode
   fontSize?: number;              // Editor font size preference
   theme?: string;                 // Editor theme preference
-  
+
   // File tree state
   expandedDirs?: string[];        // List of expanded directory paths
   fileTreeWidth?: number;         // Width of the file tree panel
@@ -161,7 +161,7 @@ export interface CreatePanelRequest {
   sessionId: string;
   type: ToolPanelType;
   title?: string;                // Optional custom title
-  initialState?: TerminalPanelState | ClaudePanelState | CodexPanelState | DiffPanelState | EditorPanelState | LogsPanelState | DashboardPanelState | SetupTasksPanelState | { customState?: unknown };
+  initialState?: TerminalPanelState | ClaudePanelState | CodexPanelState | DiffPanelState | ExplorerPanelState | LogsPanelState | DashboardPanelState | SetupTasksPanelState | { customState?: unknown };
   metadata?: Partial<ToolPanelMetadata>; // Optional metadata overrides
 }
 
@@ -204,9 +204,9 @@ export type PanelEventType =
   | 'terminal:exit'              // When terminal process exits
   | 'files:changed'              // When terminal detects file system changes
   | 'diff:refreshed'             // When diff panel refreshes its content
-  // Editor panel events
-  | 'editor:file_saved'          // When a file is saved in editor
-  | 'editor:file_changed'        // When file content changes in editor
+  // Explorer panel events
+  | 'explorer:file_saved'        // When a file is saved in explorer
+  | 'explorer:file_changed'      // When file content changes in explorer
   // Logs panel events
   | 'process:started'            // When a script process starts
   | 'process:output'             // When process produces output
@@ -267,13 +267,13 @@ export const PANEL_CAPABILITIES: Record<ToolPanelType, PanelCapabilities> = {
     canAppearInProjects: false,       // Diff not available in projects (no worktree)
     canAppearInWorktrees: true        // Diff only in worktrees
   },
-  editor: {
-    canEmit: ['editor:file_saved', 'editor:file_changed'],
+  explorer: {
+    canEmit: ['explorer:file_saved', 'explorer:file_changed'],
     canConsume: ['files:changed'],  // React to file system changes
     requiresProcess: false,          // No background process needed
-    singleton: false,                // Multiple editors allowed
-    canAppearInProjects: true,       // Editor can appear in projects
-    canAppearInWorktrees: true       // Editor can appear in worktrees
+    singleton: false,                // Multiple explorers allowed
+    canAppearInProjects: true,       // Explorer can appear in projects
+    canAppearInWorktrees: true       // Explorer can appear in worktrees
   },
   logs: {
     canEmit: ['process:started', 'process:output', 'process:ended'],

@@ -2468,13 +2468,9 @@ export function DraggableProjectTreeView({ sessionSortAscending }: DraggableProj
           }}
           projectName={selectedProjectForCreate?.name}
           projectId={selectedProjectForCreate?.id}
-          initialPrompt={retrySessionData?.prompt}
           initialSessionName={retrySessionData?.sessionName}
-          initialToolType={retrySessionData?.toolType}
           initialBaseBranch={retrySessionData?.baseBranch}
           initialFolderId={retrySessionData?.folderId}
-          initialClaudeConfig={retrySessionData?.claudeConfig}
-          initialCodexConfig={retrySessionData?.codexConfig}
           onSessionCreated={retrySessionData?.sessionId ? async () => {
             // Archive the old session after new session is created ("Discard and Retry")
             try {

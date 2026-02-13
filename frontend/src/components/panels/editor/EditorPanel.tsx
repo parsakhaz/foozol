@@ -1,31 +1,31 @@
 import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { FileEditor } from './FileEditor';
-import { EditorPanelState, ToolPanel } from '../../../../../shared/types/panels';
+import { ExplorerPanelState, ToolPanel } from '../../../../../shared/types/panels';
 import { panelApi } from '../../../services/panelApi';
 import { debounce, type DebouncedFunction } from '../../../utils/debounce';
 import { usePanelStore } from '../../../stores/panelStore';
 
-interface EditorPanelProps {
+interface ExplorerPanelProps {
   panel: ToolPanel;
   isActive: boolean;
 }
 
-export const EditorPanel: React.FC<EditorPanelProps> = ({ 
+export const ExplorerPanel: React.FC<ExplorerPanelProps> = ({ 
   panel, 
   isActive 
 }) => {
   const [isInitialized, setIsInitialized] = useState(false);
   
-  // Extract editor state each render to ensure we get updates
-  const editorState = React.useMemo(() => 
-    panel.state?.customState as EditorPanelState,
+  // Extract explorer state each render to ensure we get updates
+  const explorerState = React.useMemo(() =>
+    panel.state?.customState as ExplorerPanelState,
     [panel.state?.customState]
   );
   
-  console.log('[EditorPanel] Rendering with state:', {
+  console.log('[ExplorerPanel] Rendering with state:', {
     panelId: panel.id,
     isActive,
-    editorState,
+    explorerState,
     panelState: panel.state
   });
   
@@ -50,12 +50,12 @@ export const EditorPanel: React.FC<EditorPanelProps> = ({
   }, [isActive, isInitialized]);
   
   // Use ref to store the debounced function so it doesn't get recreated
-  const debouncedUpdateRef = useRef<DebouncedFunction<(panelId: string, sessionId: string, newState: Partial<EditorPanelState>) => void> | null>(null);
+  const debouncedUpdateRef = useRef<DebouncedFunction<(panelId: string, sessionId: string, newState: Partial<ExplorerPanelState>) => void> | null>(null);
 
   // Initialize debounced function immediately to prevent warning
   if (!debouncedUpdateRef.current) {
-    debouncedUpdateRef.current = debounce((panelId: string, sessionId: string, newState: Partial<EditorPanelState>) => {
-      console.log('[EditorPanel] Saving state to database:', {
+    debouncedUpdateRef.current = debounce((panelId: string, sessionId: string, newState: Partial<ExplorerPanelState>) => {
+      console.log('[ExplorerPanel] Saving state to database:', {
         panelId,
         newState
       });
@@ -65,11 +65,11 @@ export const EditorPanel: React.FC<EditorPanelProps> = ({
       const currentPanel = panels.find(p => p.id === panelId);
 
       if (!currentPanel) {
-        console.error('[EditorPanel] Panel not found in store:', panelId);
+        console.error('[ExplorerPanel] Panel not found in store:', panelId);
         return;
       }
 
-      const currentCustomState = (currentPanel.state?.customState || {}) as EditorPanelState;
+      const currentCustomState = (currentPanel.state?.customState || {}) as ExplorerPanelState;
 
       const stateToSave = {
         isActive: currentPanel.state?.isActive || false,
@@ -81,14 +81,14 @@ export const EditorPanel: React.FC<EditorPanelProps> = ({
         }
       };
 
-      console.log('[EditorPanel] Full state being saved:', stateToSave);
+      console.log('[ExplorerPanel] Full state being saved:', stateToSave);
 
       panelApi.updatePanel(panelId, {
         state: stateToSave
       }).then(() => {
-        console.log('[EditorPanel] State saved successfully');
+        console.log('[ExplorerPanel] State saved successfully');
       }).catch(err => {
-        console.error('[EditorPanel] Failed to update editor panel state:', err);
+        console.error('[ExplorerPanel] Failed to update explorer panel state:', err);
       });
     }, 500);
   }
@@ -97,7 +97,7 @@ export const EditorPanel: React.FC<EditorPanelProps> = ({
   useEffect(() => {
     return () => {
       if (debouncedUpdateRef.current?.flush) {
-        console.log('[EditorPanel] Flushing pending saves on unmount');
+        console.log('[ExplorerPanel] Flushing pending saves on unmount');
         debouncedUpdateRef.current.flush(); // Save any pending changes before unmount
       }
     };
@@ -107,7 +107,7 @@ export const EditorPanel: React.FC<EditorPanelProps> = ({
   useEffect(() => {
     const handleSessionSwitch = () => {
       if (debouncedUpdateRef.current?.flush) {
-        console.log('[EditorPanel] Flushing pending saves on session switch');
+        console.log('[ExplorerPanel] Flushing pending saves on session switch');
         debouncedUpdateRef.current.flush(); // Save before switching sessions
       }
     };
@@ -121,28 +121,28 @@ export const EditorPanel: React.FC<EditorPanelProps> = ({
   // Flush pending saves when panel becomes inactive
   useEffect(() => {
     if (!isActive && debouncedUpdateRef.current?.flush) {
-      console.log('[EditorPanel] Panel became inactive, flushing pending saves');
+      console.log('[ExplorerPanel] Panel became inactive, flushing pending saves');
       debouncedUpdateRef.current.flush(); // Save immediately when switching away
     }
   }, [isActive]);
-  
+
   // Save state changes to the panel
-  const handleStateChange = useCallback((newState: Partial<EditorPanelState>) => {
-    console.log('[EditorPanel] handleStateChange called with:', newState);
+  const handleStateChange = useCallback((newState: Partial<ExplorerPanelState>) => {
+    console.log('[ExplorerPanel] handleStateChange called with:', newState);
 
     // Call debounced update - it will fetch fresh state from the store
     if (debouncedUpdateRef.current) {
-      console.log('[EditorPanel] Calling debounced update');
+      console.log('[ExplorerPanel] Calling debounced update');
       debouncedUpdateRef.current(panel.id, panel.sessionId, newState);
     } else {
-      console.error('[EditorPanel] No debounced update function!');
+      console.error('[ExplorerPanel] No debounced update function!');
     }
   }, [panel.id, panel.sessionId]);
   
   // Update panel title when file changes
   const handleFileChange = useCallback((filePath: string | undefined, isDirty: boolean) => {
     if (filePath) {
-      const filename = filePath.split('/').pop() || 'Editor';
+      const filename = filePath.split('/').pop() || 'Explorer';
       const title = isDirty ? `${filename} *` : filename;
       panelApi.updatePanel(panel.id, { title });
       
@@ -156,7 +156,7 @@ export const EditorPanel: React.FC<EditorPanelProps> = ({
     return (
       <div className="flex-1 flex items-center justify-center text-text-secondary">
         <div className="text-center">
-          <div className="text-sm">Editor panel not active</div>
+          <div className="text-sm">Explorer panel not active</div>
           <div className="text-xs mt-1 text-text-tertiary">Click to activate</div>
         </div>
       </div>
@@ -165,10 +165,10 @@ export const EditorPanel: React.FC<EditorPanelProps> = ({
   
   return (
     <div className="h-full w-full">
-      <FileEditor 
+      <FileEditor
         sessionId={panel.sessionId}
-        initialFilePath={editorState?.filePath}
-        initialState={editorState}
+        initialFilePath={explorerState?.filePath}
+        initialState={explorerState}
         onFileChange={handleFileChange}
         onStateChange={handleStateChange}
       />
@@ -176,4 +176,4 @@ export const EditorPanel: React.FC<EditorPanelProps> = ({
   );
 };
 
-export default EditorPanel;
+export default ExplorerPanel;

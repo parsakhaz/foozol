@@ -1,21 +1,14 @@
-import React, { useState, useEffect, useCallback, useRef } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { API } from '../utils/api';
 import type { CreateSessionRequest } from '../types/session';
 import type { Project } from '../types/project';
 import { useErrorStore } from '../stores/errorStore';
-import { Sparkles, GitBranch, ChevronRight, ChevronDown, Brain, X, Paperclip, Code2 } from 'lucide-react';
-import { Dropdown } from './ui/Dropdown';
-import type { DropdownItem } from './ui/Dropdown';
-import FilePathAutocomplete from './FilePathAutocomplete';
+import { GitBranch, ChevronRight, ChevronDown, X } from 'lucide-react';
 import { CommitModeSettings } from './CommitModeSettings';
 import type { CommitModeSettings as CommitModeSettingsType } from '../../../shared/types';
 import { Modal, ModalHeader, ModalBody, ModalFooter } from './ui/Modal';
 import { Button } from './ui/Button';
 import { Input } from './ui/Input';
-import { Card } from './ui/Card';
-import { ClaudeCodeConfigComponent, type ClaudeCodeConfig } from './dialog/ClaudeCodeConfig';
-import { CodexConfigComponent, type CodexConfig } from './dialog/CodexConfig';
-import { DEFAULT_CODEX_MODEL, type OpenAICodexModel } from '../../../shared/types/models';
 import { useSessionPreferencesStore, type SessionCreationPreferences } from '../stores/sessionPreferencesStore';
 
 // Interface for branch information
@@ -25,54 +18,14 @@ interface BranchInfo {
   hasWorktree: boolean;
 }
 
-const LARGE_TEXT_THRESHOLD = 5000;
-
-interface AttachedImage {
-  id: string;
-  name: string;
-  dataUrl: string;
-  size: number;
-  type: string;
-}
-
-interface AttachedText {
-  id: string;
-  name: string;
-  content: string;
-  size: number;
-}
-
-const attachmentListsEqual = <T extends { id: string }>(a: T[] = [], b: T[] = []) => {
-  if (a.length !== b.length) {
-    return false;
-  }
-
-  return a.every((item, index) => item.id === b[index]?.id);
-};
-
 interface CreateSessionDialogProps {
   isOpen: boolean;
   onClose: () => void;
   projectName?: string;
   projectId?: number;
-  initialPrompt?: string;
   initialSessionName?: string;
-  // For "Discard and Retry" feature - pre-fill session creation settings
-  initialToolType?: 'claude' | 'codex' | 'none';
   initialBaseBranch?: string;
   initialFolderId?: string; // Folder to create the new session in
-  initialClaudeConfig?: {
-    model?: 'auto' | 'sonnet' | 'opus' | 'haiku';
-    permissionMode?: 'approve' | 'ignore';
-    ultrathink?: boolean;
-  };
-  initialCodexConfig?: {
-    model?: string;
-    modelProvider?: string;
-    sandboxMode?: 'read-only' | 'workspace-write' | 'danger-full-access';
-    webSearch?: boolean;
-    thinkingLevel?: 'low' | 'medium' | 'high';
-  };
   // Callback called after session is successfully created (for "Discard and Retry" to archive old session)
   onSessionCreated?: () => void;
 }
@@ -82,135 +35,34 @@ export function CreateSessionDialog({
   onClose,
   projectName,
   projectId,
-  initialPrompt,
   initialSessionName,
-  initialToolType,
   initialBaseBranch,
   initialFolderId,
-  initialClaudeConfig,
-  initialCodexConfig,
   onSessionCreated
 }: CreateSessionDialogProps) {
   const [sessionName, setSessionName] = useState<string>(initialSessionName || '');
   const [sessionCount, setSessionCount] = useState<number>(1);
-  const [selectedTools, setSelectedTools] = useState<{ claude: boolean; codex: boolean }>({
-    claude: initialToolType === 'claude' || !!initialPrompt,
-    codex: initialToolType === 'codex'
-  });
-  const [sharedPrompt, setSharedPrompt] = useState<string>(initialPrompt || '');
-  const [claudeConfig, setClaudeConfig] = useState<ClaudeCodeConfig>({
-    prompt: initialPrompt || '',
-    model: initialClaudeConfig?.model || 'auto',
-    permissionMode: initialClaudeConfig?.permissionMode || 'ignore',
-    ultrathink: initialClaudeConfig?.ultrathink || false,
-    attachedImages: [],
-    attachedTexts: []
-  });
-  const [codexConfig, setCodexConfig] = useState<CodexConfig>({
-    prompt: initialPrompt || '',
-    model: (initialCodexConfig?.model as OpenAICodexModel) || DEFAULT_CODEX_MODEL,
-    modelProvider: initialCodexConfig?.modelProvider || 'openai',
-    approvalPolicy: 'auto',  // Always 'auto' - manual mode not implemented
-    sandboxMode: initialCodexConfig?.sandboxMode || 'workspace-write',
-    webSearch: initialCodexConfig?.webSearch || false,
-    thinkingLevel: initialCodexConfig?.thinkingLevel || 'medium',
-    attachedImages: [],
-    attachedTexts: []
-  });
   const [formData, setFormData] = useState<CreateSessionRequest>({
-    prompt: initialPrompt || '',
+    prompt: '',
     worktreeTemplate: '',
     count: 1,
     permissionMode: 'ignore',
     baseBranch: initialBaseBranch
-    // Model is now managed at panel level, not session level
   });
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [worktreeError, setWorktreeError] = useState<string | null>(null);
-  const [isGeneratingName, setIsGeneratingName] = useState(false);
-  const [hasApiKey, setHasApiKey] = useState(false);
   const [branches, setBranches] = useState<Array<{ name: string; isCurrent: boolean; hasWorktree: boolean }>>([]);
   const [isLoadingBranches, setIsLoadingBranches] = useState(false);
-  const [commitModeSettings, setCommitModeSettings] = useState<CommitModeSettingsType>({ 
-    mode: 'checkpoint',
+  const [commitModeSettings, setCommitModeSettings] = useState<CommitModeSettingsType>({
+    mode: 'disabled',
     checkpointPrefix: 'checkpoint: '
   });
   const [showAdvanced, setShowAdvanced] = useState(false);
   const [showSessionOptions, setShowSessionOptions] = useState(false);
-  const [attachedImages, setAttachedImages] = useState<AttachedImage[]>([]);
-  const [attachedTexts, setAttachedTexts] = useState<AttachedText[]>([]);
-  const fileInputRef = useRef<HTMLInputElement>(null);
   const { showError } = useErrorStore();
   const { preferences, loadPreferences, updatePreferences } = useSessionPreferencesStore();
 
-  const syncPromptAcrossConfigs = useCallback((newPrompt: string) => {
-    setSharedPrompt(newPrompt);
-    setFormData(prev => (prev.prompt === newPrompt ? prev : { ...prev, prompt: newPrompt }));
-    setClaudeConfig(prev => (prev.prompt === newPrompt ? prev : { ...prev, prompt: newPrompt }));
-    setCodexConfig(prev => (prev.prompt === newPrompt ? prev : { ...prev, prompt: newPrompt }));
-  }, []);
-
-  const syncImageAttachments = useCallback((updater: (prev: AttachedImage[]) => AttachedImage[]) => {
-    setAttachedImages(prevImages => {
-      const updatedImages = updater(prevImages);
-
-      if (attachmentListsEqual(prevImages, updatedImages)) {
-        return prevImages;
-      }
-
-      setClaudeConfig(prev => {
-        const current = prev.attachedImages || [];
-        return attachmentListsEqual(current, updatedImages)
-          ? prev
-          : { ...prev, attachedImages: updatedImages };
-      });
-
-      setCodexConfig(prev => {
-        const current = prev.attachedImages || [];
-        return attachmentListsEqual(current, updatedImages)
-          ? prev
-          : { ...prev, attachedImages: updatedImages };
-      });
-
-      return updatedImages;
-    });
-  }, []);
-
-  const syncTextAttachments = useCallback((updater: (prev: AttachedText[]) => AttachedText[]) => {
-    setAttachedTexts(prevTexts => {
-      const updatedTexts = updater(prevTexts);
-
-      if (attachmentListsEqual(prevTexts, updatedTexts)) {
-        return prevTexts;
-      }
-
-      setClaudeConfig(prev => {
-        const current = prev.attachedTexts || [];
-        return attachmentListsEqual(current, updatedTexts)
-          ? prev
-          : { ...prev, attachedTexts: updatedTexts };
-      });
-
-      setCodexConfig(prev => {
-        const current = prev.attachedTexts || [];
-        return attachmentListsEqual(current, updatedTexts)
-          ? prev
-          : { ...prev, attachedTexts: updatedTexts };
-      });
-
-      return updatedTexts;
-    });
-  }, []);
-
-  const addImageAttachment = useCallback((image: AttachedImage) => {
-    syncImageAttachments(prev => [...prev, image]);
-  }, [syncImageAttachments]);
-
-  const addTextAttachment = useCallback((text: AttachedText) => {
-    syncTextAttachments(prev => [...prev, text]);
-  }, [syncTextAttachments]);
-  
-  // Load session creation preferences when dialog opens and clear session name/prompt
+  // Load session creation preferences when dialog opens
   useEffect(() => {
     if (isOpen) {
       loadPreferences();
@@ -222,145 +74,25 @@ export function CreateSessionDialog({
       }
       setSessionCount(1);
       setFormData(prev => ({ ...prev, count: 1, baseBranch: initialBaseBranch }));
-      // Only clear prompts if there's no initialPrompt
-      if (!initialPrompt) {
-        syncPromptAcrossConfigs('');
-      } else {
-        // If we have an initialPrompt, sync it to all configs
-        syncPromptAcrossConfigs(initialPrompt);
-      }
-      syncImageAttachments(() => []);
-      syncTextAttachments(() => []);
-
-      // Apply initial tool type if provided (for "Discard and Retry")
-      if (initialToolType) {
-        setSelectedTools({
-          claude: initialToolType === 'claude',
-          codex: initialToolType === 'codex'
-        });
-      }
-
-      // Apply initial Claude config if provided
-      if (initialClaudeConfig) {
-        setClaudeConfig(prev => ({
-          ...prev,
-          model: initialClaudeConfig.model ?? prev.model,
-          permissionMode: initialClaudeConfig.permissionMode ?? prev.permissionMode,
-          ultrathink: initialClaudeConfig.ultrathink ?? prev.ultrathink
-        }));
-      }
-
-      // Apply initial Codex config if provided
-      if (initialCodexConfig) {
-        setCodexConfig(prev => ({
-          ...prev,
-          model: (initialCodexConfig.model as OpenAICodexModel) || prev.model,
-          modelProvider: initialCodexConfig.modelProvider || prev.modelProvider,
-          sandboxMode: initialCodexConfig.sandboxMode || prev.sandboxMode,
-          webSearch: initialCodexConfig.webSearch ?? prev.webSearch,
-          thinkingLevel: initialCodexConfig.thinkingLevel || prev.thinkingLevel
-        }));
-      }
     }
-  }, [isOpen, loadPreferences, syncPromptAcrossConfigs, syncImageAttachments, syncTextAttachments, initialPrompt, initialSessionName, initialToolType, initialBaseBranch, initialClaudeConfig, initialCodexConfig]);
+  }, [isOpen, loadPreferences, initialSessionName, initialBaseBranch]);
 
-
-  // Apply loaded preferences to state (only if initial configs not provided)
+  // Apply loaded preferences to state
   useEffect(() => {
     if (preferences) {
-      // Map the old toolType preference to the new selectedTools state
-      // Skip if initialToolType is provided (for "Discard and Retry")
-      if (!initialToolType) {
-        if (initialPrompt) {
-          // If we have an initialPrompt, default to Claude being selected
-          setSelectedTools({ claude: true, codex: false });
-        } else if (preferences.selectedTools) {
-          setSelectedTools({
-            claude: !!preferences.selectedTools.claude,
-            codex: !!preferences.selectedTools.codex
-          });
-        } else if (preferences.toolType) {
-          // Map old preference format to new checkbox format
-          setSelectedTools({
-            claude: preferences.toolType === 'claude',
-            codex: preferences.toolType === 'codex'
-          });
-        }
-      }
-
-      // Only apply Claude config from preferences if no initial config provided
-      if (!initialClaudeConfig) {
-        setClaudeConfig(prev => ({
-          ...prev,
-          model: preferences.claudeConfig.model,
-          permissionMode: preferences.claudeConfig.permissionMode,
-          ultrathink: preferences.claudeConfig.ultrathink
-        }));
-      }
-
-      // Only apply Codex config from preferences if no initial config provided
-      if (!initialCodexConfig) {
-        setCodexConfig(prev => ({
-          ...prev,
-          model: preferences.codexConfig.model as OpenAICodexModel,
-          modelProvider: preferences.codexConfig.modelProvider,
-          approvalPolicy: 'auto',  // Always 'auto' - manual mode not implemented
-          sandboxMode: preferences.codexConfig.sandboxMode,
-          webSearch: preferences.codexConfig.webSearch,
-          thinkingLevel: preferences.codexConfig.thinkingLevel || 'medium'
-        }));
-      }
-
       setShowAdvanced(preferences.showAdvanced);
       setShowSessionOptions(preferences.showSessionOptions ?? false);
       setCommitModeSettings(preferences.commitModeSettings);
-      // Note: we don't apply baseBranch as it should be project-specific
     }
-  }, [preferences, initialPrompt, initialToolType, initialClaudeConfig, initialCodexConfig]);
+  }, [preferences]);
 
   // Save preferences when certain settings change
   const savePreferences = useCallback(async (updates: Partial<SessionCreationPreferences>) => {
     await updatePreferences(updates);
   }, [updatePreferences]);
 
-  const persistSelectedToolsPreference = useCallback((tools: { claude: boolean; codex: boolean }) => {
-    const nextToolType: SessionCreationPreferences['toolType'] = tools.claude && tools.codex
-      ? 'none'
-      : tools.claude
-        ? 'claude'
-        : tools.codex
-          ? 'codex'
-          : 'none';
-
-    void savePreferences({
-      toolType: nextToolType,
-      selectedTools: {
-        claude: tools.claude,
-        codex: tools.codex
-      }
-    });
-  }, [savePreferences]);
-  
-  // Note: Model preferences are now stored in panel settings, not at project level
-  
   useEffect(() => {
     if (isOpen) {
-      // Fetch the default permission mode and check for API key when dialog opens
-      API.config.get().then(response => {
-        if (response.success) {
-          if (response.data?.defaultPermissionMode) {
-            setFormData(prev => ({
-              ...prev,
-              permissionMode: response.data.defaultPermissionMode
-            }));
-          }
-          // Check if API key exists
-          setHasApiKey(!!response.data?.anthropicApiKey);
-        }
-      }).catch((err: Error) => {
-        console.error('Failed to fetch config:', err);
-      });
-      
       // Fetch branches if projectId is provided
       if (projectId) {
         setIsLoadingBranches(true);
@@ -373,7 +105,7 @@ export function CreateSessionDialog({
           if (!project) {
             throw new Error('Project not found');
           }
-          
+
           return Promise.all([
             API.projects.listBranches(projectId.toString()),
             // Get the main branch for this project using its path
@@ -388,7 +120,7 @@ export function CreateSessionDialog({
               setFormData(prev => ({ ...prev, baseBranch: currentBranch.name }));
             }
           }
-          
+
           if (mainBranchResponse.success && mainBranchResponse.data) {
             // Main branch detected but not currently used in UI
           }
@@ -400,7 +132,7 @@ export function CreateSessionDialog({
       }
     }
   }, [isOpen, projectId]);
-  
+
   // Add keyboard shortcut handler
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
@@ -421,185 +153,64 @@ export function CreateSessionDialog({
     return () => window.removeEventListener('keydown', handleKeyDown);
   }, [isOpen]);
 
-  // Auto-focus prompt textarea on dialog open
+  // Auto-focus session name input on dialog open
   useEffect(() => {
     if (isOpen) {
       // Small delay to let the dialog render
       const timer = setTimeout(() => {
-        const textarea = document.querySelector('#create-session-form textarea') as HTMLTextAreaElement;
-        if (textarea) textarea.focus();
+        const input = document.getElementById('worktreeTemplate') as HTMLInputElement;
+        if (input) input.focus();
       }, 100);
       return () => clearTimeout(timer);
     }
   }, [isOpen]);
 
-  // Define all hooks before the early return
-  const processFile = useCallback(async (file: File): Promise<AttachedImage | null> => {
-    const generateImageId = () => `img_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
-    
-    if (!file.type.startsWith('image/')) {
-      console.warn('File is not an image:', file.name);
-      return null;
-    }
-
-    // Limit file size to 10MB
-    if (file.size > 10 * 1024 * 1024) {
-      console.warn('Image file too large (max 10MB):', file.name);
-      return null;
-    }
-
-    return new Promise((resolve) => {
-      const reader = new FileReader();
-      reader.onload = (e) => {
-        if (e.target?.result) {
-          resolve({
-            id: generateImageId(),
-            name: file.name,
-            dataUrl: e.target.result as string,
-            size: file.size,
-            type: file.type,
-          });
-        } else {
-          resolve(null);
-        }
-      };
-      reader.onerror = () => resolve(null);
-      reader.readAsDataURL(file);
-    });
-  }, []);
-
-  const generateTextId = useCallback(() => `txt_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`, []);
-
-  const handlePaste = useCallback(async (e: React.ClipboardEvent) => {
-    const items = e.clipboardData?.items;
-    if (!items) return;
-
-    // Check for text content first
-    const textData = e.clipboardData.getData('text/plain');
-
-    if (textData && textData.length > LARGE_TEXT_THRESHOLD) {
-      // Large text pasted - convert to attachment
-      e.preventDefault();
-
-      const textAttachment: AttachedText = {
-        id: generateTextId(),
-        name: `Pasted Text (${textData.length.toLocaleString()} chars)`,
-        content: textData,
-        size: textData.length,
-      };
-
-      addTextAttachment(textAttachment);
-      console.log(`[Large Text] Automatically attached ${textData.length} characters from paste`);
-      return;
-    }
-
-    // Check for images
-    const imageItems: DataTransferItem[] = [];
-    for (let i = 0; i < items.length; i++) {
-      if (items[i].type.startsWith('image/')) {
-        imageItems.push(items[i]);
-      }
-    }
-
-    if (imageItems.length === 0) return;
-
-    e.preventDefault();
-
-    for (const item of imageItems) {
-      const file = item.getAsFile();
-      if (file) {
-        const image = await processFile(file);
-        if (image) {
-          addImageAttachment(image);
-        }
-      }
-    }
-  }, [processFile, addImageAttachment, addTextAttachment, generateTextId]);
-
-  const removeImage = useCallback((id: string) => {
-    syncImageAttachments(prev => prev.filter(img => img.id !== id));
-  }, [syncImageAttachments]);
-
-  const removeText = useCallback((id: string) => {
-    syncTextAttachments(prev => prev.filter(txt => txt.id !== id));
-  }, [syncTextAttachments]);
-
   if (!isOpen) return null;
 
-  // Tool selection helper variables
-  const toolSelectionId = selectedTools.claude && selectedTools.codex ? 'both'
-    : selectedTools.claude ? 'claude'
-    : selectedTools.codex ? 'codex'
-    : 'none';
-
-  const toolLabels: Record<string, string> = {
-    claude: 'Claude Code', codex: 'Codex', both: 'Both', none: 'None'
-  };
-
-  const toolIcons: Record<string, React.ComponentType<{ className?: string }> | undefined> = {
-    claude: Brain, codex: Code2, both: undefined, none: undefined
-  };
-
-  const SelectedIcon = toolIcons[toolSelectionId];
-
-  const toolItems: DropdownItem[] = [
-    { id: 'claude', label: 'Claude Code', icon: Brain,
-      onClick: () => { const next = { claude: true, codex: false }; setSelectedTools(next); persistSelectedToolsPreference(next); } },
-    { id: 'codex', label: 'Codex', icon: Code2,
-      onClick: () => { const next = { claude: false, codex: true }; setSelectedTools(next); persistSelectedToolsPreference(next); } },
-    { id: 'both', label: 'Both',
-      onClick: () => { const next = { claude: true, codex: true }; setSelectedTools(next); persistSelectedToolsPreference(next); } },
-    { id: 'none', label: 'None',
-      onClick: () => { const next = { claude: false, codex: false }; setSelectedTools(next); persistSelectedToolsPreference(next); } },
-  ];
-  
   const validateWorktreeName = (name: string): string | null => {
     if (!name) return null; // Empty is allowed
-    
+
     // Spaces are now allowed in session names
     // They will be converted to hyphens for the actual worktree name
-    
+
     // Check for invalid git characters (excluding spaces which are now allowed)
     const invalidChars = /[~^:?*\[\]\\]/;
     if (invalidChars.test(name)) {
       return 'Session name contains invalid characters (~^:?*[]\\)';
     }
-    
+
     // Check if it starts or ends with dot
     if (name.startsWith('.') || name.endsWith('.')) {
       return 'Session name cannot start or end with a dot';
     }
-    
+
     // Check if it starts or ends with slash
     if (name.startsWith('/') || name.endsWith('/')) {
       return 'Session name cannot start or end with a slash';
     }
-    
+
     // Check for consecutive dots
     if (name.includes('..')) {
       return 'Session name cannot contain consecutive dots';
     }
-    
+
     return null;
   };
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
 
-    // Check if session name is required
-    // Session name is always required when no tools are selected OR when there's no API key
-    if (!sessionName && (!hasApiKey || (!selectedTools.claude && !selectedTools.codex))) {
+    // Session name is always required
+    if (!sessionName.trim()) {
       showError({
         title: 'Session Name Required',
-        error: !selectedTools.claude && !selectedTools.codex
-          ? 'Please provide a session name when creating a session without AI tools.'
-          : 'Please provide a session name or add an Anthropic API key in Settings to enable auto-naming.'
+        error: 'Please provide a session name.'
       });
       return;
     }
 
     // Validate worktree name
-    const validationError = validateWorktreeName(sessionName || '');
+    const validationError = validateWorktreeName(sessionName);
     if (validationError) {
       showError({
         title: 'Invalid Session Name',
@@ -611,119 +222,19 @@ export function CreateSessionDialog({
     setIsSubmitting(true);
 
     try {
-      // Prepare shared prompt with attachments
-      let finalPrompt = sharedPrompt || '';
-
-      // Process attachments (shared across all tools)
-      const attachmentPaths: string[] = [];
-
-      // Save attached text files
-      if (attachedTexts.length > 0) {
-        const tempId = `pending_${Date.now()}_${Math.random().toString(36).substring(2, 9)}`;
-
-        for (const text of attachedTexts) {
-          try {
-            console.log(`[Large Text] Saving attached text (${text.size} chars) to temporary file`);
-            const textFilePath = await window.electronAPI.sessions.saveLargeText(
-              tempId,
-              text.content
-            );
-            attachmentPaths.push(textFilePath);
-            console.log(`[Large Text] Text saved to: ${textFilePath}`);
-          } catch (error) {
-            console.error('Failed to save attached text to file:', error);
-          }
-        }
-      }
-
-      // Save attached images
-      if (attachedImages.length > 0) {
-        const tempId = `pending_${Date.now()}_${Math.random().toString(36).substring(2, 9)}`;
-
-        try {
-          console.log(`[Image] Saving ${attachedImages.length} attached image(s) to temporary files`);
-          const imagePaths = await window.electronAPI.sessions.saveImages(
-            tempId,
-            attachedImages.map(img => ({
-              name: img.name,
-              dataUrl: img.dataUrl,
-              type: img.type,
-            }))
-          );
-          attachmentPaths.push(...imagePaths);
-          console.log(`[Image] Images saved to:`, imagePaths);
-        } catch (error) {
-          console.error('Failed to save attached images:', error);
-        }
-      }
-
-      // Add attachments to prompt if any
-      if (attachmentPaths.length > 0) {
-        const attachmentsMessage = `\n\n<attachments>\nPlease look at these files which may provide additional instructions or context:\n${attachmentPaths.join('\n')}\n</attachments>`;
-        finalPrompt = `${finalPrompt}${attachmentsMessage}`;
-        console.log('[CreateSessionDialog] Final prompt with attachments:', finalPrompt);
-        console.log('[CreateSessionDialog] Attachment paths:', attachmentPaths);
-      }
-
-      // Determine which tools to create sessions for
-      const toolsToCreate: Array<'claude' | 'codex' | 'none'> = [];
-      if (selectedTools.claude) toolsToCreate.push('claude');
-      if (selectedTools.codex) toolsToCreate.push('codex');
-
-      // If no tools selected, create a session with no agent
-      if (toolsToCreate.length === 0) {
-        toolsToCreate.push('none');
-      }
-
-      // Generate session name ONCE if not provided and we have API key + prompt
-      let baseSessionName = sessionName;
-      if (!baseSessionName && hasApiKey && finalPrompt.trim()) {
-        try {
-          console.log('[CreateSessionDialog] Generating session name from prompt');
-          const response = await API.sessions.generateName(finalPrompt);
-          if (response.success && response.data) {
-            baseSessionName = response.data;
-            console.log(`[CreateSessionDialog] Generated session name: ${baseSessionName}`);
-          } else {
-            // AI generation failed
-            showError({
-              title: 'Failed to Generate Session Name',
-              error: response.error || 'Could not generate session name from prompt. Please provide a session name manually.'
-            });
-            return;
-          }
-        } catch (error) {
-          console.error('[CreateSessionDialog] Failed to generate session name:', error);
-          showError({
-            title: 'Failed to Generate Session Name',
-            error: 'An error occurred while generating the session name. Please provide a session name manually.'
-          });
-          return;
-        }
-      }
-
-      // At this point, baseSessionName should always have a value (either user-provided or AI-generated)
-      if (!baseSessionName) {
-        showError({
-          title: 'Session Name Required',
-          error: 'Please provide a session name or add an Anthropic API key in Settings to enable auto-naming.'
-        });
-        return;
-      }
-
       // Determine if we need to create a folder
-      // Create folder when: multiple sessions (sessionCount > 1) OR multiple tools selected
+      // Create folder when: multiple sessions (sessionCount > 1)
       // But NOT if we already have an initialFolderId (from "Discard and Retry")
-      const shouldCreateFolder = !initialFolderId && (sessionCount > 1 || toolsToCreate.length > 1);
+      const shouldCreateFolder = !initialFolderId && sessionCount > 1;
 
       // Use initialFolderId if provided, otherwise create folder if needed
       let folderId: string | undefined = initialFolderId;
       if (shouldCreateFolder && projectId) {
         try {
-          const folderResponse = await API.folders.create(baseSessionName, projectId);
+          const folderResponse = await API.folders.create(sessionName, projectId);
           if (folderResponse.success && folderResponse.data) {
             folderId = folderResponse.data.id;
-            console.log(`[CreateSessionDialog] Created folder: ${baseSessionName} (${folderId})`);
+            console.log(`[CreateSessionDialog] Created folder: ${sessionName} (${folderId})`);
             // Wait a bit to ensure the folder is created in the UI
             await new Promise(resolve => setTimeout(resolve, 200));
           }
@@ -733,81 +244,34 @@ export function CreateSessionDialog({
         }
       }
 
-      // Create sessions for each selected tool
-      for (const toolType of toolsToCreate) {
-        // Prepare tool-specific prompt
-        let toolPrompt = finalPrompt;
-        let toolPermissionMode: 'ignore' | 'approve' = 'ignore';
+      console.log('[CreateSessionDialog] Creating session with:', {
+        sessionName,
+        count: sessionCount,
+        toolType: 'none',
+        folderId
+      });
 
-        if (toolType === 'claude') {
-          if (claudeConfig.ultrathink && toolPrompt) {
-            toolPrompt += '\nultrathink';
-          }
-          toolPermissionMode = claudeConfig.permissionMode;
-        } else if (toolType === 'codex') {
-          toolPermissionMode = formData.permissionMode || 'ignore';
-        } else if (toolType === 'none') {
-          // For sessions with no agent, use default permission mode
-          toolPermissionMode = formData.permissionMode || 'ignore';
-        }
+      const response = await API.sessions.create({
+        prompt: '',
+        worktreeTemplate: sessionName,
+        count: sessionCount,
+        toolType: 'none',
+        permissionMode: 'ignore',
+        projectId,
+        folderId,
+        commitMode: commitModeSettings.mode,
+        commitModeSettings: JSON.stringify(commitModeSettings),
+        baseBranch: formData.baseBranch
+      });
 
-        // Determine session name:
-        // - If multiple tools selected, add tool prefix (e.g., 'CC-' for Claude Code or 'CX-' for Codex)
-        // - If both sessionCount > 1 AND multiple tools, the count suffix will be added by taskQueue
-        let finalSessionName: string | undefined;
-        if (baseSessionName) {
-          if (toolsToCreate.length > 1) {
-            const prefix = toolType === 'claude' ? 'CC' : toolType === 'codex' ? 'CX' : toolType;
-            finalSessionName = `${prefix}-${baseSessionName}`;
-          } else {
-            finalSessionName = baseSessionName;
-          }
-        }
-
-        console.log('[CreateSessionDialog] Creating session with:', {
-          sessionName: finalSessionName || '(auto-generate)',
-          count: sessionCount,
-          toolType,
-          prompt: toolPrompt || '(no prompt)',
-          folderId
+      if (!response.success) {
+        showError({
+          title: 'Failed to Create Session',
+          error: response.error || 'An error occurred while creating the session.',
+          details: response.details,
+          command: response.command
         });
-
-        const response = await API.sessions.create({
-          prompt: toolPrompt || '',
-          worktreeTemplate: finalSessionName,
-          count: sessionCount,
-          toolType,
-          permissionMode: toolPermissionMode,
-          projectId,
-          folderId, // Pass the folder ID to assign sessions to the folder
-          commitMode: commitModeSettings.mode,
-          commitModeSettings: JSON.stringify(commitModeSettings),
-          baseBranch: formData.baseBranch,
-          codexConfig: toolType === 'codex' ? {
-            model: codexConfig.model,
-            modelProvider: codexConfig.modelProvider,
-            approvalPolicy: 'auto',
-            sandboxMode: codexConfig.sandboxMode,
-            webSearch: codexConfig.webSearch,
-            thinkingLevel: codexConfig.thinkingLevel
-          } : undefined,
-          claudeConfig: toolType === 'claude' ? {
-            model: claudeConfig.model,
-            permissionMode: claudeConfig.permissionMode,
-            ultrathink: claudeConfig.ultrathink
-          } : undefined
-        });
-
-        if (!response.success) {
-          showError({
-            title: `Failed to Create ${toolType === 'claude' ? 'Claude' : 'Codex'} Session`,
-            error: response.error || 'An error occurred while creating the session.',
-            details: response.details,
-            command: response.command
-          });
-          // Continue creating other sessions even if one fails
-          continue;
-        }
+        return;
       }
 
       // Call onSessionCreated callback (e.g., to archive old session in "Discard and Retry")
@@ -829,10 +293,10 @@ export function CreateSessionDialog({
       setIsSubmitting(false);
     }
   };
-  
+
   return (
-    <Modal 
-      isOpen={isOpen} 
+    <Modal
+      isOpen={isOpen}
       onClose={() => {
         setWorktreeError(null);
         onClose();
@@ -841,279 +305,104 @@ export function CreateSessionDialog({
       closeOnOverlayClick={false}
     >
       <ModalHeader>
-        Create New Session{projectName && ` in ${projectName}`}
+        New Session{projectName && ` in ${projectName}`}
       </ModalHeader>
-      
+
       <ModalBody className="p-0">
         <div className="flex-1 overflow-y-auto">
           <form id="create-session-form" onSubmit={handleSubmit}>
-            {/* 1. Prompt Section (top, no section header) */}
-            <div className="p-6 border-b border-border-primary">
-              {/* Attachment previews */}
-              {(attachedImages.length > 0 || attachedTexts.length > 0) && (
-                <div className="mb-3 flex flex-wrap gap-2">
-                  {attachedTexts.map(text => (
-                    <div key={text.id} className="relative group">
-                      <div className="h-12 px-3 flex items-center gap-2 bg-surface-secondary rounded border border-border-primary">
-                        <Paperclip className="w-4 h-4 text-text-secondary" />
-                        <span className="text-xs text-text-secondary max-w-[150px] truncate">
-                          {text.name}
-                        </span>
-                      </div>
-                      <button
-                        type="button"
-                        onClick={() => removeText(text.id)}
-                        className="absolute -top-1 -right-1 bg-surface-primary border border-border-primary rounded-full p-0.5 opacity-0 group-hover:opacity-100 transition-opacity shadow-sm"
-                        aria-label={`Remove ${text.name}`}
-                      >
-                        <X className="w-2.5 h-2.5 text-text-secondary" />
-                      </button>
-                    </div>
-                  ))}
-
-                  {attachedImages.map(image => (
-                    <div key={image.id} className="relative group">
-                      <img
-                        src={image.dataUrl}
-                        alt={image.name}
-                        className="h-12 w-12 object-cover rounded border border-border-primary"
-                      />
-                      <button
-                        type="button"
-                        onClick={() => removeImage(image.id)}
-                        className="absolute -top-1 -right-1 bg-surface-primary border border-border-primary rounded-full p-0.5 opacity-0 group-hover:opacity-100 transition-opacity shadow-sm"
-                        aria-label={`Remove ${image.name}`}
-                      >
-                        <X className="w-2.5 h-2.5 text-text-secondary" />
-                      </button>
-                    </div>
-                  ))}
-                </div>
-              )}
-              {/* Prompt textarea */}
-              <div className="relative">
-                <FilePathAutocomplete
-                  value={sharedPrompt}
-                  onChange={(value) => syncPromptAcrossConfigs(value)}
-                  projectId={projectId?.toString()}
-                  placeholder="Describe your task... (use @ to reference files)"
-                  className="w-full px-3 py-2 pr-10 border border-border-primary rounded-md focus:outline-none focus:ring-2 focus:ring-interactive text-text-primary bg-surface-secondary placeholder-text-tertiary"
-                  isTextarea={true}
-                  rows={3}
-                  onPaste={handlePaste}
-                />
-                <button
-                  type="button"
-                  onClick={() => fileInputRef.current?.click()}
-                  className="absolute bottom-2 right-2 p-1.5 rounded hover:bg-surface-hover transition-colors"
-                  title="Attach images"
-                >
-                  <Paperclip className="w-4 h-4 text-text-tertiary hover:text-text-secondary" />
-                </button>
-              </div>
-              {/* Hidden file input */}
-              <input
-                ref={fileInputRef}
-                type="file"
-                accept="image/*"
-                multiple
-                className="hidden"
-                onChange={async (e) => {
-                  const files = Array.from(e.target.files || []);
-                  for (const file of files) {
-                    const image = await processFile(file);
-                    if (image) {
-                      addImageAttachment(image);
-                    }
-                  }
-                  e.target.value = '';
-                }}
-              />
-            </div>
-
-            {/* 2. Session Name (visible, not inside collapsible) */}
+            {/* 1. Session Name (visible, required) */}
             <div className="p-6 border-b border-border-primary">
               <label className="block text-sm font-medium text-text-primary mb-1">
-                Session Name {(!selectedTools.claude && !selectedTools.codex) || !hasApiKey ? '(Required)' : '(Optional)'}
+                Session Name
               </label>
-              <div className="flex gap-2">
-                <Input
-                  id="worktreeTemplate"
-                  type="text"
-                  value={sessionName}
-                  onChange={(e) => {
-                    const value = e.target.value;
-                    setSessionName(value);
-                    setFormData({ ...formData, worktreeTemplate: value });
-                    // Real-time validation
-                    const error = validateWorktreeName(value);
-                    setWorktreeError(error);
-                  }}
-                  error={worktreeError || undefined}
-                  placeholder={hasApiKey ? "Leave empty for AI-generated name" : "Enter a name for your session"}
-                  disabled={isGeneratingName}
-                  className="flex-1"
-                />
-                {hasApiKey && formData.prompt.trim() && (
-                  <Button
-                    type="button"
-                    onClick={async () => {
-                      setIsGeneratingName(true);
-                      try {
-                        // Use the shared prompt for name generation
-                        const response = await API.sessions.generateName(sharedPrompt || 'New session');
-                        if (response.success && response.data) {
-                          setSessionName(response.data);
-                          setFormData({ ...formData, worktreeTemplate: response.data });
-                          setWorktreeError(null);
-                        } else {
-                          showError({
-                            title: 'Failed to Generate Name',
-                            error: response.error || 'Could not generate session name'
-                          });
-                        }
-                      } catch (error) {
-                        showError({
-                          title: 'Failed to Generate Name',
-                          error: 'An error occurred while generating the name'
-                        });
-                      } finally {
-                        setIsGeneratingName(false);
-                      }
-                    }}
-                    variant="secondary"
-                    loading={isGeneratingName}
-                    disabled={!sharedPrompt?.trim()}
-                    title="Generate name from prompt"
-                    size="md"
-                  >
-                    <Sparkles className="w-4 h-4 mr-1" />
-                    {isGeneratingName ? 'Generating...' : 'Generate'}
-                  </Button>
-                )}
-              </div>
-              {!sessionName && (!hasApiKey || (!selectedTools.claude && !selectedTools.codex)) && (
-                <p className="text-xs text-status-warning mt-1">
-                  {(!selectedTools.claude && !selectedTools.codex)
-                    ? 'Session name is required when creating sessions without AI tools.'
-                    : 'Session name is required. Add an Anthropic API key in Settings to enable AI-powered auto-naming.'}
-                </p>
-              )}
-              {!worktreeError && (sessionName || (hasApiKey && (selectedTools.claude || selectedTools.codex))) && (
+              <Input
+                id="worktreeTemplate"
+                type="text"
+                value={sessionName}
+                onChange={(e) => {
+                  const value = e.target.value;
+                  setSessionName(value);
+                  setFormData({ ...formData, worktreeTemplate: value });
+                  // Real-time validation
+                  const error = validateWorktreeName(value);
+                  setWorktreeError(error);
+                }}
+                error={worktreeError || undefined}
+                placeholder="Enter a name for your session"
+                className="w-full"
+              />
+              {!worktreeError && (
                 <p className="text-xs text-text-tertiary mt-1">
                   The name for your session and worktree folder.
                 </p>
               )}
             </div>
 
-            {/* 3. "Session options" collapsible */}
+            {/* 2. Base Branch (always visible) */}
+            {branches.length > 0 && (
+              <div className="p-6 border-b border-border-primary">
+                <div className="flex items-center gap-2 mb-1">
+                  <GitBranch className="w-4 h-4 text-text-tertiary" />
+                  <label htmlFor="baseBranch" className="text-sm font-medium text-text-primary">
+                    Base Branch
+                  </label>
+                </div>
+                <select
+                  id="baseBranch"
+                  value={formData.baseBranch || ''}
+                  onChange={(e) => {
+                    const selectedBranch = e.target.value;
+                    setFormData({ ...formData, baseBranch: selectedBranch });
+                    savePreferences({ baseBranch: selectedBranch });
+                  }}
+                  className="w-full px-3 py-2 border border-border-primary rounded-md focus:outline-none focus:ring-2 focus:ring-interactive text-text-primary bg-surface-secondary"
+                  disabled={isLoadingBranches}
+                >
+                  {branches.map((branch, index) => {
+                    // Check if this is the first non-worktree branch after worktree branches
+                    const isFirstNonWorktree = index > 0 &&
+                      !branch.hasWorktree &&
+                      branches[index - 1].hasWorktree;
+
+                    return (
+                      <React.Fragment key={branch.name}>
+                        {isFirstNonWorktree && (
+                          <option disabled value="">
+                            ──────────────
+                          </option>
+                        )}
+                        <option value={branch.name}>
+                          {branch.name} {branch.isCurrent ? '(current)' : ''}
+                        </option>
+                      </React.Fragment>
+                    );
+                  })}
+                </select>
+                <p className="text-xs text-text-tertiary mt-1">
+                  Create the new session branch from this existing branch
+                </p>
+              </div>
+            )}
+
+            {/* 3. Number of Sessions (compact with expand) */}
             <div className="px-6 py-4 border-b border-border-primary">
-              <Button
-                type="button"
-                onClick={() => {
-                  const newShowSessionOptions = !showSessionOptions;
-                  setShowSessionOptions(newShowSessionOptions);
-                  savePreferences({ showSessionOptions: newShowSessionOptions });
-                }}
-                variant="ghost"
-                size="sm"
-                className="text-text-secondary hover:text-text-primary"
-              >
-                {showSessionOptions ? <ChevronDown className="w-4 h-4 mr-1" /> : <ChevronRight className="w-4 h-4 mr-1" />}
-                Session options
-              </Button>
-              {showSessionOptions && (
-                <div className="mt-4 space-y-4">
-                  {/* Tool selection dropdown */}
-                  <div className="flex items-center gap-2">
-                    <label className="text-sm text-text-secondary">AI Tool</label>
-                    <Dropdown
-                      trigger={
-                        <button type="button" className="flex items-center gap-2 px-3 py-1.5 text-sm border border-border-secondary rounded-md hover:bg-interactive/10 text-text-primary">
-                          {SelectedIcon && <SelectedIcon className="w-4 h-4" />}
-                          {toolLabels[toolSelectionId]}
-                          <ChevronDown size={14} className="text-text-tertiary" />
-                        </button>
-                      }
-                      items={toolItems}
-                      selectedId={toolSelectionId}
-                      width="sm"
-                    />
-                  </div>
-
-                  {/* Tool-specific config (Claude/Codex settings) */}
-                  {selectedTools.claude && (
-                    <Card variant="bordered" className="p-4">
-                      <div className="flex items-center gap-2 mb-3">
-                        <Brain className="w-4 h-4 text-interactive" />
-                        <h4 className="text-sm font-semibold text-text-primary">Claude Code Settings</h4>
-                      </div>
-                      <ClaudeCodeConfigComponent
-                        config={claudeConfig}
-                        onChange={(newConfig) => {
-                          setClaudeConfig(newConfig);
-                          // Don't sync prompt anymore since it's managed at the top level
-                          // Save claude config preferences (excluding prompt and attachments)
-                          const { prompt, attachedImages, attachedTexts, ...configToSave } = newConfig;
-                          savePreferences({ claudeConfig: {
-                            model: configToSave.model,
-                            permissionMode: configToSave.permissionMode,
-                            ultrathink: configToSave.ultrathink ?? false
-                          } });
-                        }}
-                        projectId={projectId?.toString()}
-                        onPaste={handlePaste}
-                        onRemoveImage={removeImage}
-                        onRemoveText={removeText}
-                        disabled={false}
-                      />
-                    </Card>
-                  )}
-
-                  {selectedTools.codex && (
-                    <Card variant="bordered" className="p-4">
-                      <div className="flex items-center gap-2 mb-3">
-                        <Code2 className="w-4 h-4 text-interactive" />
-                        <h4 className="text-sm font-semibold text-text-primary">Codex Settings</h4>
-                      </div>
-                      <CodexConfigComponent
-                        config={codexConfig}
-                        onChange={(newConfig) => {
-                          setCodexConfig(newConfig);
-                          // Don't sync prompt anymore since it's managed at the top level
-                          // Save codex config preferences (excluding prompt and attachments)
-                          const { prompt, attachedImages, attachedTexts, ...configToSave } = newConfig;
-                          savePreferences({ codexConfig: {
-                            model: (configToSave.model ?? DEFAULT_CODEX_MODEL) as string,
-                            modelProvider: configToSave.modelProvider ?? 'openai',
-                            approvalPolicy: 'auto',  // Always 'auto' - manual mode not implemented
-                            sandboxMode: configToSave.sandboxMode ?? 'workspace-write',
-                            webSearch: configToSave.webSearch ?? false,
-                            thinkingLevel: configToSave.thinkingLevel ?? 'medium'
-                          } });
-                        }}
-                        projectId={projectId?.toString()}
-                        onPaste={handlePaste}
-                        onRemoveImage={removeImage}
-                        onRemoveText={removeText}
-                        disabled={false}
-                      />
-                    </Card>
-                  )}
-
-                  {/* No tools message */}
-                  {!selectedTools.claude && !selectedTools.codex && (
-                    <Card variant="bordered" className="p-4 text-center text-text-tertiary">
-                      <p className="text-sm">No AI tools selected. The session will be created without an AI agent.</p>
-                      <p className="text-xs mt-2 opacity-75">You can use the terminal and git features without an AI assistant.</p>
-                    </Card>
-                  )}
-
-                  {/* Number of sessions slider */}
-                  <div>
-                    <label htmlFor="count" className="block text-sm font-medium text-text-secondary mb-1">
-                      Number of Sessions: {sessionCount}
-                    </label>
+              <div className="flex items-center gap-3">
+                <span className="text-sm text-text-secondary">Sessions: {sessionCount}</span>
+                {!showSessionOptions && sessionCount === 1 && (
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="sm"
+                    onClick={() => setShowSessionOptions(true)}
+                    className="text-text-tertiary hover:text-text-primary p-1"
+                    title="Create multiple sessions"
+                  >
+                    <ChevronRight className="w-4 h-4" />
+                  </Button>
+                )}
+                {(showSessionOptions || sessionCount > 1) && (
+                  <div className="flex-1 flex items-center gap-2">
                     <input
                       id="count"
                       type="range"
@@ -1125,20 +414,34 @@ export function CreateSessionDialog({
                         setSessionCount(count);
                         setFormData(prev => ({ ...prev, count }));
                       }}
-                      className="w-full"
+                      className="flex-1"
                     />
-                    {sessionCount > 1 && (
-                      <p className="text-xs text-text-tertiary mt-1">
-                        Creating multiple sessions with numbered suffixes
-                      </p>
-                    )}
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      size="sm"
+                      onClick={() => {
+                        setShowSessionOptions(false);
+                        setSessionCount(1);
+                        setFormData(prev => ({ ...prev, count: 1 }));
+                      }}
+                      className="text-text-tertiary hover:text-text-primary p-1"
+                      title="Reset to 1"
+                    >
+                      <X className="w-3 h-3" />
+                    </Button>
                   </div>
-                </div>
+                )}
+              </div>
+              {sessionCount > 1 && (
+                <p className="text-xs text-text-tertiary mt-1">
+                  Creating multiple sessions with numbered suffixes
+                </p>
               )}
             </div>
-            
-            {/* Advanced Options Toggle */}
-            <div className="px-6 pb-4">
+
+            {/* 4. Advanced Options Toggle */}
+            <div className="px-6 py-4">
               <Button
                 type="button"
                 onClick={() => {
@@ -1151,59 +454,13 @@ export function CreateSessionDialog({
                 className="text-text-secondary hover:text-text-primary"
               >
                 {showAdvanced ? <ChevronDown className="w-4 h-4 mr-1" /> : <ChevronRight className="w-4 h-4 mr-1" />}
-                More options
+                Advanced
               </Button>
             </div>
-            
+
             {/* Advanced Options - Collapsible */}
             {showAdvanced && (
               <div className="px-6 pb-6 space-y-4 border-t border-border-primary pt-4">
-                {/* Base Branch */}
-                {branches.length > 0 && (
-                  <div>
-                    <div className="flex items-center gap-2 mb-1">
-                      <GitBranch className="w-4 h-4 text-text-tertiary" />
-                      <label htmlFor="baseBranch" className="text-sm font-medium text-text-secondary">
-                        Base Branch
-                      </label>
-                    </div>
-                    <select
-                      id="baseBranch"
-                      value={formData.baseBranch || ''}
-                      onChange={(e) => {
-                        const selectedBranch = e.target.value;
-                        setFormData({ ...formData, baseBranch: selectedBranch });
-                        savePreferences({ baseBranch: selectedBranch });
-                      }}
-                      className="w-full px-3 py-2 border border-border-primary rounded-md focus:outline-none focus:ring-2 focus:ring-interactive text-text-primary bg-surface-secondary"
-                      disabled={isLoadingBranches}
-                    >
-                      {branches.map((branch, index) => {
-                        // Check if this is the first non-worktree branch after worktree branches
-                        const isFirstNonWorktree = index > 0 && 
-                          !branch.hasWorktree && 
-                          branches[index - 1].hasWorktree;
-                        
-                        return (
-                          <React.Fragment key={branch.name}>
-                            {isFirstNonWorktree && (
-                              <option disabled value="">
-                                ──────────────
-                              </option>
-                            )}
-                            <option value={branch.name}>
-                              {branch.name} {branch.isCurrent ? '(current)' : ''}
-                            </option>
-                          </React.Fragment>
-                        );
-                      })}
-                    </select>
-                    <p className="text-xs text-text-tertiary mt-1">
-                      Create the new session branch from this existing branch
-                    </p>
-                  </div>
-                )}
-                
                 {/* Commit Mode Settings */}
                 <CommitModeSettings
                   projectId={projectId}
@@ -1219,7 +476,7 @@ export function CreateSessionDialog({
           </form>
         </div>
       </ModalBody>
-      
+
       <ModalFooter className="flex items-center justify-between">
         <div className="text-xs text-text-tertiary">
           <span className="font-medium">Tip:</span> Press {navigator.platform.includes('Mac') ? 'Cmd' : 'Ctrl'}+Enter to create
@@ -1239,27 +496,16 @@ export function CreateSessionDialog({
           <Button
             type="submit"
             form="create-session-form"
-            disabled={
-              isSubmitting ||
-              !!worktreeError ||
-              (!sessionName && (!hasApiKey || (!selectedTools.claude && !selectedTools.codex)))
-            }
+            disabled={isSubmitting || !!worktreeError || !sessionName.trim()}
             loading={isSubmitting}
             title={
               isSubmitting ? 'Creating session...' :
               worktreeError ? 'Please fix the session name error' :
-              (!sessionName && (!hasApiKey || (!selectedTools.claude && !selectedTools.codex))) ?
-                (!selectedTools.claude && !selectedTools.codex)
-                  ? 'Please enter a session name (required for sessions without AI tools)'
-                  : 'Please enter a session name (required without API key)' :
+              !sessionName.trim() ? 'Please enter a session name' :
               undefined
             }
           >
-            {isSubmitting ? 'Creating...' : (() => {
-              const toolCount = Math.max(1, (selectedTools.claude ? 1 : 0) + (selectedTools.codex ? 1 : 0));
-              const totalSessions = toolCount * sessionCount;
-              return `Create ${totalSessions > 1 ? totalSessions + ' Sessions' : 'Session'}`;
-            })()}
+            {isSubmitting ? 'Creating...' : `Create${sessionCount > 1 ? ` ${sessionCount} Sessions` : ''}`}
           </Button>
         </div>
       </ModalFooter>

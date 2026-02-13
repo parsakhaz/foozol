@@ -52,7 +52,7 @@ const defaultPreferences: SessionCreationPreferences = {
   showAdvanced: false,
   showSessionOptions: false,
   commitModeSettings: {
-    mode: 'checkpoint',
+    mode: 'disabled',
     checkpointPrefix: 'checkpoint: '
   }
 };

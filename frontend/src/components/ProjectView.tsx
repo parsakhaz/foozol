@@ -94,7 +94,24 @@ export const ProjectView: React.FC<ProjectViewProps> = ({
           });
           panelsCreated = true;
         }
-        
+
+        // Create explorer panel if it doesn't exist
+        const explorerPanel = loadedPanels.find(p => p.type === 'explorer');
+        if (!explorerPanel) {
+          try {
+            console.log('[ProjectView] Creating explorer panel for project');
+            await panelApi.createPanel({
+              sessionId: mainRepoSessionId,
+              type: 'explorer',
+              title: 'Explorer',
+              metadata: {}
+            });
+            panelsCreated = true;
+          } catch (error) {
+            console.error('[ProjectView] Failed to create explorer panel:', error);
+          }
+        }
+
         // Reload panels if any were created
         const finalPanels = panelsCreated 
           ? await panelApi.loadPanelsForSession(mainRepoSessionId)
@@ -104,12 +121,12 @@ export const ProjectView: React.FC<ProjectViewProps> = ({
         
         // Determine which panel should be active
         const activePanel = await panelApi.getActivePanel(mainRepoSessionId);
-        const setupPanel = finalPanels.find(p => p.type === 'setup-tasks');
+        const explorerPanelToActivate = finalPanels.find(p => p.type === 'explorer');
         const dashPanel = finalPanels.find(p => p.type === 'dashboard');
-        
+
         if (!activePanel) {
-          // No active panel - prioritize setup-tasks if it exists, otherwise dashboard
-          const panelToActivate = setupPanel || dashPanel;
+          // No active panel - prioritize explorer if it exists, otherwise dashboard
+          const panelToActivate = explorerPanelToActivate || dashPanel;
           if (panelToActivate) {
             setActivePanelInStore(mainRepoSessionId, panelToActivate.id);
             await panelApi.setActivePanel(mainRepoSessionId, panelToActivate.id);

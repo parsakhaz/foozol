@@ -182,8 +182,8 @@ export function registerPanelHandlers(ipcMain: IpcMain, services: AppServices) {
       return customState?.isInitialized || false;
     }
     
-    // Editor panels don't need initialization
-    if (panel.type === 'editor') {
+    // Explorer panels don't need initialization
+    if (panel.type === 'explorer') {
       return true;
     }
     

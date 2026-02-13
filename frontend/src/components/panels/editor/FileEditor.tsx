@@ -8,7 +8,7 @@ import { useTheme } from '../../../contexts/ThemeContext';
 import { debounce } from '../../../utils/debounce';
 import { MarkdownPreview } from '../../MarkdownPreview';
 import { useResizablePanel } from '../../../hooks/useResizablePanel';
-import { EditorPanelState } from '../../../../../shared/types/panels';
+import { ExplorerPanelState } from '../../../../../shared/types/panels';
 
 interface FileItem {
   name: string;
@@ -560,9 +560,9 @@ function FileTree({
 interface FileEditorProps {
   sessionId: string;
   initialFilePath?: string;
-  initialState?: EditorPanelState;
+  initialState?: ExplorerPanelState;
   onFileChange?: (filePath: string | undefined, isDirty: boolean) => void;
-  onStateChange?: (state: Partial<EditorPanelState>) => void;
+  onStateChange?: (state: Partial<ExplorerPanelState>) => void;
 }
 
 export function FileEditor({ 
