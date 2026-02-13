@@ -29,7 +29,7 @@ import { PanelContainer } from './panels/PanelContainer';
 import { SessionProvider } from '../contexts/SessionContext';
 import { ToolPanel, ToolPanelType } from '../../../shared/types/panels';
 import { PanelCreateOptions } from '../types/panelComponents';
-import { Download, Upload, GitMerge, Code2, Terminal, GripHorizontal, ChevronDown, ChevronUp } from 'lucide-react';
+import { Download, Upload, GitMerge, Code2, Terminal, GripHorizontal, ChevronDown, ChevronUp, RefreshCw, Archive, ArchiveRestore, GitCommitHorizontal } from 'lucide-react';
 import type { Project } from '../types/project';
 import { devLog, renderLog } from '../utils/console';
 
@@ -495,6 +495,70 @@ export const SessionView = memo(() => {
         description: hook.gitCommands?.getPushCommand ? `git ${hook.gitCommands.getPushCommand()}` : 'git push'
       }
     ] : [
+      // Commit action
+      {
+        id: 'commit',
+        label: 'Commit',
+        icon: GitCommitHorizontal,
+        onClick: () => {
+          hook.setDialogType('commit');
+          hook.setShowCommitMessageDialog(true);
+        },
+        disabled: hook.isMerging || activeSession.status === 'running' || activeSession.status === 'initializing' || !activeSession.gitStatus?.hasUncommittedChanges,
+        variant: 'default' as const,
+        description: activeSession.gitStatus?.hasUncommittedChanges ? 'Stage all changes and commit' : 'No uncommitted changes'
+      },
+      // Push action
+      {
+        id: 'push',
+        label: 'Push',
+        icon: Upload,
+        onClick: hook.handleGitPush,
+        disabled: hook.isMerging || activeSession.status === 'running' || activeSession.status === 'initializing' || !activeSession.gitStatus?.ahead,
+        variant: 'default' as const,
+        description: activeSession.gitStatus?.ahead ? `Push ${activeSession.gitStatus.ahead} commit(s) to remote` : 'No commits to push'
+      },
+      // Pull action
+      {
+        id: 'pull',
+        label: 'Pull',
+        icon: Download,
+        onClick: hook.handleGitPull,
+        disabled: hook.isMerging || activeSession.status === 'running' || activeSession.status === 'initializing',
+        variant: 'default' as const,
+        description: 'Pull latest changes from remote'
+      },
+      // Fetch action
+      {
+        id: 'fetch',
+        label: 'Fetch',
+        icon: RefreshCw,
+        onClick: hook.handleGitFetch,
+        disabled: hook.isMerging || activeSession.status === 'running' || activeSession.status === 'initializing',
+        variant: 'default' as const,
+        description: 'Fetch from remote without merging'
+      },
+      // Stash action
+      {
+        id: 'stash',
+        label: 'Stash',
+        icon: Archive,
+        onClick: hook.handleGitStash,
+        disabled: hook.isMerging || activeSession.status === 'running' || activeSession.status === 'initializing' || !activeSession.gitStatus?.hasUncommittedChanges,
+        variant: 'default' as const,
+        description: activeSession.gitStatus?.hasUncommittedChanges ? 'Stash uncommitted changes' : 'No changes to stash'
+      },
+      // Pop Stash action
+      {
+        id: 'stash-pop',
+        label: 'Pop Stash',
+        icon: ArchiveRestore,
+        onClick: hook.handleGitStashPop,
+        disabled: hook.isMerging || activeSession.status === 'running' || activeSession.status === 'initializing',
+        variant: 'default' as const,
+        description: 'Apply and remove most recent stash'
+      },
+      // Separator - Rebase/Merge operations
       {
         id: 'rebase-from-main',
         label: `Rebase from ${hook.gitCommands?.mainBranch || 'main'}`,
@@ -526,7 +590,7 @@ export const SessionView = memo(() => {
         description: sessionProject?.open_ide_command ? 'Open the worktree in your default IDE' : 'No IDE command configured'
       }
     ];
-  }, [activeSession, hook.isMerging, hook.gitCommands, hook.hasChangesToRebase, hook.handleGitPull, hook.handleGitPush, hook.handleRebaseMainIntoWorktree, hook.handleSquashAndRebaseToMain, hook.handleOpenIDE, hook.isOpeningIDE, sessionProject?.open_ide_command, activeSession?.gitStatus]);
+  }, [activeSession, hook.isMerging, hook.gitCommands, hook.hasChangesToRebase, hook.handleGitPull, hook.handleGitPush, hook.handleGitFetch, hook.handleGitStash, hook.handleGitStashPop, hook.setShowCommitMessageDialog, hook.setDialogType, hook.handleRebaseMainIntoWorktree, hook.handleSquashAndRebaseToMain, hook.handleOpenIDE, hook.isOpeningIDE, sessionProject?.open_ide_command, activeSession?.gitStatus]);
   
   // Removed unused variables - now handled by panels
 
@@ -692,7 +756,14 @@ export const SessionView = memo(() => {
         setCommitMessage={hook.setCommitMessage}
         shouldSquash={hook.shouldSquash}
         setShouldSquash={hook.setShouldSquash}
-        onConfirm={hook.performSquashWithCommitMessage}
+        onConfirm={(message) => {
+          if (hook.dialogType === 'commit') {
+            hook.handleGitStageAndCommit(message);
+            hook.setShowCommitMessageDialog(false);
+          } else {
+            hook.performSquashWithCommitMessage(message);
+          }
+        }}
         onMergeAndArchive={hook.performSquashWithCommitMessageAndArchive}
         isMerging={hook.isMerging}
         isMergingAndArchiving={hook.isMergingAndArchiving}

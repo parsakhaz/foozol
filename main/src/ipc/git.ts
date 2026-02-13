@@ -1214,6 +1214,257 @@ export function registerGitHandlers(ipcMain: IpcMain, services: AppServices): vo
     }
   });
 
+  ipcMain.handle('sessions:git-fetch', async (_event, sessionId: string) => {
+    try {
+      const session = await sessionManager.getSession(sessionId);
+      if (!session) {
+        return { success: false, error: 'Session not found' };
+      }
+
+      if (!session.worktreePath) {
+        return { success: false, error: 'Session has no worktree path' };
+      }
+
+      // Emit git operation started event
+      const startMessage = `🔄 GIT OPERATION\nFetching from remote...`;
+      emitGitOperationToProject(sessionId, 'git:operation_started', startMessage, {
+        operation: 'fetch'
+      });
+
+      // Run git fetch
+      const result = await worktreeManager.gitFetch(session.worktreePath);
+
+      // Emit git operation completed event
+      const successMessage = `✓ Successfully fetched from remote` +
+                            (result.output ? `\n\nGit output:\n${result.output}` : '');
+      emitGitOperationToProject(sessionId, 'git:operation_completed', successMessage, {
+        operation: 'fetch',
+        output: result.output
+      });
+
+      // Refresh git status after fetch (may show new commits behind)
+      await refreshGitStatusForSession(sessionId);
+
+      return { success: true, data: result };
+    } catch (error: unknown) {
+      console.error('Failed to fetch from remote:', error);
+
+      const gitError = error as GitError;
+
+      // Emit git operation failed event
+      const errorMessage = `✗ Fetch failed: ${error instanceof Error ? error.message : 'Unknown error'}` +
+                          (gitError.gitOutput ? `\n\nGit output:\n${gitError.gitOutput}` : '');
+      emitGitOperationToProject(sessionId, 'git:operation_failed', errorMessage, {
+        operation: 'fetch',
+        error: error instanceof Error ? error.message : String(error),
+        gitOutput: gitError.gitOutput
+      });
+
+      return {
+        success: false,
+        error: error instanceof Error ? error.message : 'Failed to fetch from remote',
+        gitError: {
+          output: gitError.gitOutput || (error instanceof Error ? error.message : String(error)),
+          workingDirectory: gitError.workingDirectory || ''
+        }
+      };
+    }
+  });
+
+  ipcMain.handle('sessions:git-stash', async (_event, sessionId: string, message?: string) => {
+    try {
+      const session = await sessionManager.getSession(sessionId);
+      if (!session) {
+        return { success: false, error: 'Session not found' };
+      }
+
+      if (!session.worktreePath) {
+        return { success: false, error: 'Session has no worktree path' };
+      }
+
+      // Emit git operation started event
+      const startMessage = `🔄 GIT OPERATION\nStashing changes...`;
+      emitGitOperationToProject(sessionId, 'git:operation_started', startMessage, {
+        operation: 'stash'
+      });
+
+      // Run git stash
+      const result = await worktreeManager.gitStash(session.worktreePath, message);
+
+      // Emit git operation completed event
+      const successMessage = `✓ Successfully stashed changes` +
+                            (result.output ? `\n\nGit output:\n${result.output}` : '');
+      emitGitOperationToProject(sessionId, 'git:operation_completed', successMessage, {
+        operation: 'stash',
+        output: result.output
+      });
+
+      // Refresh git status after stash
+      await refreshGitStatusForSession(sessionId);
+
+      return { success: true, data: result };
+    } catch (error: unknown) {
+      console.error('Failed to stash changes:', error);
+
+      const gitError = error as GitError;
+
+      // Emit git operation failed event
+      const errorMessage = `✗ Stash failed: ${error instanceof Error ? error.message : 'Unknown error'}` +
+                          (gitError.gitOutput ? `\n\nGit output:\n${gitError.gitOutput}` : '');
+      emitGitOperationToProject(sessionId, 'git:operation_failed', errorMessage, {
+        operation: 'stash',
+        error: error instanceof Error ? error.message : String(error),
+        gitOutput: gitError.gitOutput
+      });
+
+      return {
+        success: false,
+        error: error instanceof Error ? error.message : 'Failed to stash changes',
+        gitError: {
+          output: gitError.gitOutput || (error instanceof Error ? error.message : String(error)),
+          workingDirectory: gitError.workingDirectory || ''
+        }
+      };
+    }
+  });
+
+  ipcMain.handle('sessions:git-stash-pop', async (_event, sessionId: string) => {
+    try {
+      const session = await sessionManager.getSession(sessionId);
+      if (!session) {
+        return { success: false, error: 'Session not found' };
+      }
+
+      if (!session.worktreePath) {
+        return { success: false, error: 'Session has no worktree path' };
+      }
+
+      // Emit git operation started event
+      const startMessage = `🔄 GIT OPERATION\nPopping stash...`;
+      emitGitOperationToProject(sessionId, 'git:operation_started', startMessage, {
+        operation: 'stash_pop'
+      });
+
+      // Run git stash pop
+      const result = await worktreeManager.gitStashPop(session.worktreePath);
+
+      // Emit git operation completed event
+      const successMessage = `✓ Successfully applied stash` +
+                            (result.output ? `\n\nGit output:\n${result.output}` : '');
+      emitGitOperationToProject(sessionId, 'git:operation_completed', successMessage, {
+        operation: 'stash_pop',
+        output: result.output
+      });
+
+      // Refresh git status after stash pop
+      await refreshGitStatusForSession(sessionId);
+
+      return { success: true, data: result };
+    } catch (error: unknown) {
+      console.error('Failed to pop stash:', error);
+
+      const gitError = error as GitError;
+
+      // Emit git operation failed event
+      const errorMessage = `✗ Stash pop failed: ${error instanceof Error ? error.message : 'Unknown error'}` +
+                          (gitError.gitOutput ? `\n\nGit output:\n${gitError.gitOutput}` : '');
+      emitGitOperationToProject(sessionId, 'git:operation_failed', errorMessage, {
+        operation: 'stash_pop',
+        error: error instanceof Error ? error.message : String(error),
+        gitOutput: gitError.gitOutput
+      });
+
+      return {
+        success: false,
+        error: error instanceof Error ? error.message : 'Failed to pop stash',
+        gitError: {
+          output: gitError.gitOutput || (error instanceof Error ? error.message : String(error)),
+          workingDirectory: gitError.workingDirectory || ''
+        }
+      };
+    }
+  });
+
+  ipcMain.handle('sessions:has-stash', async (_event, sessionId: string) => {
+    try {
+      const session = await sessionManager.getSession(sessionId);
+      if (!session) {
+        return { success: false, error: 'Session not found' };
+      }
+
+      if (!session.worktreePath) {
+        return { success: false, error: 'Session has no worktree path' };
+      }
+
+      const hasStash = await worktreeManager.hasStash(session.worktreePath);
+      return { success: true, data: hasStash };
+    } catch (error: unknown) {
+      console.error('Failed to check stash:', error);
+      return {
+        success: false,
+        error: error instanceof Error ? error.message : 'Failed to check stash'
+      };
+    }
+  });
+
+  ipcMain.handle('sessions:git-stage-and-commit', async (_event, sessionId: string, message: string) => {
+    try {
+      const session = await sessionManager.getSession(sessionId);
+      if (!session) {
+        return { success: false, error: 'Session not found' };
+      }
+
+      if (!session.worktreePath) {
+        return { success: false, error: 'Session has no worktree path' };
+      }
+
+      // Emit git operation started event
+      const startMessage = `🔄 GIT OPERATION\nCommitting changes...`;
+      emitGitOperationToProject(sessionId, 'git:operation_started', startMessage, {
+        operation: 'commit',
+        message: message.split('\n')[0]
+      });
+
+      // Run git add -A && git commit
+      const result = await worktreeManager.gitStageAllAndCommit(session.worktreePath, message);
+
+      // Emit git operation completed event
+      const successMessage = `✓ Successfully committed changes` +
+                            (result.output ? `\n\nGit output:\n${result.output}` : '');
+      emitGitOperationToProject(sessionId, 'git:operation_completed', successMessage, {
+        operation: 'commit',
+        output: result.output
+      });
+
+      // Refresh git status after commit
+      await refreshGitStatusForSession(sessionId);
+
+      return { success: true, data: result };
+    } catch (error: unknown) {
+      console.error('Failed to commit changes:', error);
+
+      const gitError = error as GitError;
+
+      // Emit git operation failed event
+      const errorMessage = `✗ Commit failed: ${error instanceof Error ? error.message : 'Unknown error'}` +
+                          (gitError.gitOutput ? `\n\nGit output:\n${gitError.gitOutput}` : '');
+      emitGitOperationToProject(sessionId, 'git:operation_failed', errorMessage, {
+        operation: 'commit',
+        error: error instanceof Error ? error.message : String(error),
+        gitOutput: gitError.gitOutput
+      });
+
+      return {
+        success: false,
+        error: error instanceof Error ? error.message : 'Failed to commit changes',
+        gitError: {
+          output: gitError.gitOutput || (error instanceof Error ? error.message : String(error)),
+          workingDirectory: gitError.workingDirectory || ''
+        }
+      };
+    }
+  });
+
   ipcMain.handle('sessions:get-last-commits', async (_event, sessionId: string, count: number = 50) => {
     try {
       const session = await sessionManager.getSession(sessionId);

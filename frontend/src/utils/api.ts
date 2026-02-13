@@ -260,6 +260,31 @@ export class API {
       return window.electronAPI.sessions.gitPush(sessionId);
     },
 
+    async gitFetch(sessionId: string) {
+      if (!isElectron()) throw new Error('Electron API not available');
+      return window.electronAPI.sessions.gitFetch(sessionId);
+    },
+
+    async gitStash(sessionId: string, message?: string) {
+      if (!isElectron()) throw new Error('Electron API not available');
+      return window.electronAPI.sessions.gitStash(sessionId, message);
+    },
+
+    async gitStashPop(sessionId: string) {
+      if (!isElectron()) throw new Error('Electron API not available');
+      return window.electronAPI.sessions.gitStashPop(sessionId);
+    },
+
+    async gitStageAndCommit(sessionId: string, message: string) {
+      if (!isElectron()) throw new Error('Electron API not available');
+      return window.electronAPI.sessions.gitStageAndCommit(sessionId, message);
+    },
+
+    async hasStash(sessionId: string) {
+      if (!isElectron()) throw new Error('Electron API not available');
+      return window.electronAPI.sessions.hasStash(sessionId);
+    },
+
     async getGitStatus(sessionId: string) {
       if (!isElectron()) throw new Error('Electron API not available');
       return window.electronAPI.sessions.getGitStatus(sessionId);

@@ -258,9 +258,14 @@ contextBridge.exposeInMainWorld('electronAPI', {
     // Git pull/push operations
     gitPull: (sessionId: string): Promise<IPCResponse> => ipcRenderer.invoke('sessions:git-pull', sessionId),
     gitPush: (sessionId: string): Promise<IPCResponse> => ipcRenderer.invoke('sessions:git-push', sessionId),
+    gitFetch: (sessionId: string): Promise<IPCResponse> => ipcRenderer.invoke('sessions:git-fetch', sessionId),
+    gitStash: (sessionId: string, message?: string): Promise<IPCResponse> => ipcRenderer.invoke('sessions:git-stash', sessionId, message),
+    gitStashPop: (sessionId: string): Promise<IPCResponse> => ipcRenderer.invoke('sessions:git-stash-pop', sessionId),
+    gitStageAndCommit: (sessionId: string, message: string): Promise<IPCResponse> => ipcRenderer.invoke('sessions:git-stage-and-commit', sessionId, message),
+    hasStash: (sessionId: string): Promise<IPCResponse> => ipcRenderer.invoke('sessions:has-stash', sessionId),
     getGitStatus: (sessionId: string, nonBlocking?: boolean, isInitialLoad?: boolean): Promise<IPCResponse> => ipcRenderer.invoke('sessions:get-git-status', sessionId, nonBlocking, isInitialLoad),
     getLastCommits: (sessionId: string, count: number): Promise<IPCResponse> => ipcRenderer.invoke('sessions:get-last-commits', sessionId, count),
-    
+
     // Git operation helpers
     hasChangesToRebase: (sessionId: string): Promise<IPCResponse> => ipcRenderer.invoke('sessions:has-changes-to-rebase', sessionId),
     getGitCommands: (sessionId: string): Promise<IPCResponse> => ipcRenderer.invoke('sessions:get-git-commands', sessionId),

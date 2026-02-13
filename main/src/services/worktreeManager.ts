@@ -861,11 +861,99 @@ Co-Authored-By: foozol <foozol@stravu.com>` : commitMessage;
     try {
       const { stdout, stderr } = await execWithShellPath('git push', { cwd: worktreePath });
       const output = stdout || stderr || 'Push completed successfully';
-      
+
       return { output };
     } catch (error: unknown) {
       const err = error as Error & { stderr?: string; stdout?: string };
       const gitError = new Error(err.message || 'Git push failed') as Error & {
+        gitOutput?: string;
+        workingDirectory?: string;
+      };
+      gitError.gitOutput = err.stderr || err.stdout || err.message || '';
+      gitError.workingDirectory = worktreePath;
+      throw gitError;
+    }
+  }
+
+  async gitFetch(worktreePath: string): Promise<{ output: string }> {
+    try {
+      const { stdout, stderr } = await execWithShellPath('git fetch --all', { cwd: worktreePath });
+      const output = stdout || stderr || 'Fetch completed successfully';
+
+      return { output };
+    } catch (error: unknown) {
+      const err = error as Error & { stderr?: string; stdout?: string };
+      const gitError = new Error(err.message || 'Git fetch failed') as Error & {
+        gitOutput?: string;
+        workingDirectory?: string;
+      };
+      gitError.gitOutput = err.stderr || err.stdout || err.message || '';
+      gitError.workingDirectory = worktreePath;
+      throw gitError;
+    }
+  }
+
+  async gitStash(worktreePath: string, message?: string): Promise<{ output: string }> {
+    try {
+      const stashMessage = message || 'Crystal stash';
+      const escapedMessage = stashMessage.replace(/"/g, '\\"');
+      const { stdout, stderr } = await execWithShellPath(`git stash push -m "${escapedMessage}"`, { cwd: worktreePath });
+      const output = stdout || stderr || 'Changes stashed successfully';
+
+      return { output };
+    } catch (error: unknown) {
+      const err = error as Error & { stderr?: string; stdout?: string };
+      const gitError = new Error(err.message || 'Git stash failed') as Error & {
+        gitOutput?: string;
+        workingDirectory?: string;
+      };
+      gitError.gitOutput = err.stderr || err.stdout || err.message || '';
+      gitError.workingDirectory = worktreePath;
+      throw gitError;
+    }
+  }
+
+  async gitStashPop(worktreePath: string): Promise<{ output: string }> {
+    try {
+      const { stdout, stderr } = await execWithShellPath('git stash pop', { cwd: worktreePath });
+      const output = stdout || stderr || 'Stash applied successfully';
+
+      return { output };
+    } catch (error: unknown) {
+      const err = error as Error & { stderr?: string; stdout?: string };
+      const gitError = new Error(err.message || 'Git stash pop failed') as Error & {
+        gitOutput?: string;
+        workingDirectory?: string;
+      };
+      gitError.gitOutput = err.stderr || err.stdout || err.message || '';
+      gitError.workingDirectory = worktreePath;
+      throw gitError;
+    }
+  }
+
+  async hasStash(worktreePath: string): Promise<boolean> {
+    try {
+      const { stdout } = await execWithShellPath('git stash list', { cwd: worktreePath });
+      return stdout.trim().length > 0;
+    } catch {
+      return false;
+    }
+  }
+
+  async gitStageAllAndCommit(worktreePath: string, message: string): Promise<{ output: string }> {
+    try {
+      // Stage all changes including untracked files
+      await execWithShellPath('git add -A', { cwd: worktreePath });
+
+      // Commit with message
+      const escapedMessage = message.replace(/"/g, '\\"');
+      const { stdout, stderr } = await execWithShellPath(`git commit -m "${escapedMessage}"`, { cwd: worktreePath });
+      const output = stdout || stderr || 'Committed successfully';
+
+      return { output };
+    } catch (error: unknown) {
+      const err = error as Error & { stderr?: string; stdout?: string };
+      const gitError = new Error(err.message || 'Git commit failed') as Error & {
         gitOutput?: string;
         workingDirectory?: string;
       };

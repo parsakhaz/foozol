@@ -54,7 +54,7 @@ export const useSessionView = (
   const [hasChangesToRebase, setHasChangesToRebase] = useState<boolean>(false);
   const [showCommitMessageDialog, setShowCommitMessageDialog] = useState(false);
   const [commitMessage, setCommitMessage] = useState('');
-  const [dialogType, setDialogType] = useState<'rebase' | 'squash'>('rebase');
+  const [dialogType, setDialogType] = useState<'rebase' | 'squash' | 'commit'>('rebase');
   const [showGitErrorDialog, setShowGitErrorDialog] = useState(false);
   const [gitErrorDetails, setGitErrorDetails] = useState<GitErrorDetails | null>(null);
   const [shouldSquash, setShouldSquash] = useState(true);
@@ -1299,6 +1299,70 @@ export const useSessionView = (
     }
   };
 
+  const handleGitFetch = async () => {
+    if (!activeSession) return;
+    setIsMerging(true);
+    setMergeError(null);
+    try {
+      const response = await API.sessions.gitFetch(activeSession.id);
+      if (!response.success) {
+        setMergeError(response.error || 'Failed to fetch from remote');
+      }
+    } catch (error) {
+      setMergeError(error instanceof Error ? error.message : 'Failed to fetch from remote');
+    } finally {
+      setIsMerging(false);
+    }
+  };
+
+  const handleGitStash = async () => {
+    if (!activeSession) return;
+    setIsMerging(true);
+    setMergeError(null);
+    try {
+      const response = await API.sessions.gitStash(activeSession.id);
+      if (!response.success) {
+        setMergeError(response.error || 'Failed to stash changes');
+      }
+    } catch (error) {
+      setMergeError(error instanceof Error ? error.message : 'Failed to stash changes');
+    } finally {
+      setIsMerging(false);
+    }
+  };
+
+  const handleGitStashPop = async () => {
+    if (!activeSession) return;
+    setIsMerging(true);
+    setMergeError(null);
+    try {
+      const response = await API.sessions.gitStashPop(activeSession.id);
+      if (!response.success) {
+        setMergeError(response.error || 'Failed to pop stash');
+      }
+    } catch (error) {
+      setMergeError(error instanceof Error ? error.message : 'Failed to pop stash');
+    } finally {
+      setIsMerging(false);
+    }
+  };
+
+  const handleGitStageAndCommit = async (message: string) => {
+    if (!activeSession) return;
+    setIsMerging(true);
+    setMergeError(null);
+    try {
+      const response = await API.sessions.gitStageAndCommit(activeSession.id, message);
+      if (!response.success) {
+        setMergeError(response.error || 'Failed to commit changes');
+      }
+    } catch (error) {
+      setMergeError(error instanceof Error ? error.message : 'Failed to commit changes');
+    } finally {
+      setIsMerging(false);
+    }
+  };
+
   const handleToggleAutoCommit = async () => {
     if (!activeSession) return;
     try {
@@ -1787,6 +1851,7 @@ export const useSessionView = (
     commitMessage,
     setCommitMessage,
     dialogType,
+    setDialogType,
     showGitErrorDialog,
     setShowGitErrorDialog,
     gitErrorDetails,
@@ -1801,6 +1866,10 @@ export const useSessionView = (
     handleStopSession,
     handleGitPull,
     handleGitPush,
+    handleGitFetch,
+    handleGitStash,
+    handleGitStashPop,
+    handleGitStageAndCommit,
     handleToggleAutoCommit,
     handleRebaseMainIntoWorktree,
     handleAbortRebaseAndUseClaude,

@@ -8,7 +8,7 @@ import { Card } from '../ui/Card';
 interface CommitMessageDialogProps {
   isOpen: boolean;
   onClose: () => void;
-  dialogType: 'squash' | 'rebase';
+  dialogType: 'squash' | 'rebase' | 'commit';
   gitCommands: GitCommands | null;
   commitMessage: string;
   setCommitMessage: (message: string) => void;
@@ -38,9 +38,11 @@ export const CommitMessageDialog: React.FC<CommitMessageDialogProps> = ({
   return (
     <Modal isOpen={isOpen} onClose={onClose} size="xl">
       <ModalHeader>
-        {dialogType === 'squash'
-          ? `Merge to ${gitCommands?.mainBranch || 'Main'}`
-          : `Rebase from ${gitCommands?.mainBranch || 'Main'}`
+        {dialogType === 'commit'
+          ? 'Commit Changes'
+          : dialogType === 'squash'
+            ? `Merge to ${gitCommands?.mainBranch || 'Main'}`
+            : `Rebase from ${gitCommands?.mainBranch || 'Main'}`
         }
       </ModalHeader>
       
@@ -69,13 +71,21 @@ export const CommitMessageDialog: React.FC<CommitMessageDialogProps> = ({
               onChange={(e) => setCommitMessage(e.target.value)}
               rows={8}
               disabled={dialogType === 'squash' && !shouldSquash}
-              placeholder={dialogType === 'squash' ? (shouldSquash ? "Enter commit message..." : "Not needed when preserving commits") : "Enter commit message..."}
+              placeholder={
+                dialogType === 'commit'
+                  ? "Enter commit message..."
+                  : dialogType === 'squash'
+                    ? (shouldSquash ? "Enter commit message..." : "Not needed when preserving commits")
+                    : "Enter commit message..."
+              }
               helperText={
-                dialogType === 'squash'
-                  ? (shouldSquash
-                      ? `This message will be used for the merge commit.`
-                      : `Original commit messages will be preserved when merging.`)
-                  : `This message will be used when rebasing.`
+                dialogType === 'commit'
+                  ? 'All changes will be staged and committed with this message.'
+                  : dialogType === 'squash'
+                    ? (shouldSquash
+                        ? `This message will be used for the merge commit.`
+                        : `Original commit messages will be preserved when merging.`)
+                    : `This message will be used when rebasing.`
               }
               fullWidth
               className="font-mono text-sm"
@@ -120,10 +130,13 @@ export const CommitMessageDialog: React.FC<CommitMessageDialogProps> = ({
         )}
         <Button
           onClick={() => onConfirm(commitMessage)}
-          disabled={(shouldSquash && !commitMessage.trim()) || isProcessing}
+          disabled={(!commitMessage.trim() && (dialogType === 'commit' || shouldSquash)) || isProcessing}
           loading={isMerging}
         >
-          {isMerging ? 'Merging...' : (dialogType === 'squash' ? 'Merge' : 'Rebase')}
+          {isMerging
+            ? (dialogType === 'commit' ? 'Committing...' : 'Merging...')
+            : (dialogType === 'commit' ? 'Commit' : (dialogType === 'squash' ? 'Merge' : 'Rebase'))
+          }
         </Button>
       </ModalFooter>
     </Modal>

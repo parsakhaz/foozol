@@ -113,6 +113,11 @@ interface ElectronAPI {
     // Git pull/push operations
     gitPull: (sessionId: string) => Promise<IPCResponse>;
     gitPush: (sessionId: string) => Promise<IPCResponse>;
+    gitFetch: (sessionId: string) => Promise<IPCResponse>;
+    gitStash: (sessionId: string, message?: string) => Promise<IPCResponse>;
+    gitStashPop: (sessionId: string) => Promise<IPCResponse>;
+    gitStageAndCommit: (sessionId: string, message: string) => Promise<IPCResponse>;
+    hasStash: (sessionId: string) => Promise<IPCResponse>;
     getGitStatus: (sessionId: string, nonBlocking?: boolean, isInitialLoad?: boolean) => Promise<IPCResponse>;
     getLastCommits: (sessionId: string, count: number) => Promise<IPCResponse>;
 
