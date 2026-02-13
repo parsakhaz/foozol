@@ -52,6 +52,7 @@ export const useSessionView = (
   const [outputLoadState, setOutputLoadState] = useState<'idle' | 'loading' | 'loaded' | 'error'>('idle');
   const [gitCommands, setGitCommands] = useState<GitCommands | null>(null);
   const [hasChangesToRebase, setHasChangesToRebase] = useState<boolean>(false);
+  const [hasStash, setHasStash] = useState<boolean>(false);
   const [showCommitMessageDialog, setShowCommitMessageDialog] = useState(false);
   const [commitMessage, setCommitMessage] = useState('');
   const [dialogType, setDialogType] = useState<'rebase' | 'squash' | 'commit'>('rebase');
@@ -968,16 +969,19 @@ export const useSessionView = (
     if (!activeSession) {
       setGitCommands(null);
       setHasChangesToRebase(false);
+      setHasStash(false);
       return;
     }
     const loadGitData = async () => {
       try {
-        const [commandsResponse, changesResponse] = await Promise.all([
+        const [commandsResponse, changesResponse, stashResponse] = await Promise.all([
           API.sessions.getGitCommands(activeSession.id),
-          API.sessions.hasChangesToRebase(activeSession.id)
+          API.sessions.hasChangesToRebase(activeSession.id),
+          API.sessions.hasStash(activeSession.id)
         ]);
         if (commandsResponse.success) setGitCommands(commandsResponse.data);
         if (changesResponse.success) setHasChangesToRebase(changesResponse.data);
+        if (stashResponse.success) setHasStash(stashResponse.data);
       } catch (error) { console.error('Error loading git data:', error); }
     };
     loadGitData();
@@ -1323,6 +1327,11 @@ export const useSessionView = (
       const response = await API.sessions.gitStash(activeSession.id);
       if (!response.success) {
         setMergeError(response.error || 'Failed to stash changes');
+      } else {
+        // Refresh stash status after successful stash
+        API.sessions.hasStash(activeSession.id).then(stashResponse => {
+          if (stashResponse.success) setHasStash(stashResponse.data);
+        }).catch(() => {});
       }
     } catch (error) {
       setMergeError(error instanceof Error ? error.message : 'Failed to stash changes');
@@ -1339,6 +1348,11 @@ export const useSessionView = (
       const response = await API.sessions.gitStashPop(activeSession.id);
       if (!response.success) {
         setMergeError(response.error || 'Failed to pop stash');
+      } else {
+        // Refresh stash status after successful pop
+        API.sessions.hasStash(activeSession.id).then(stashResponse => {
+          if (stashResponse.success) setHasStash(stashResponse.data);
+        }).catch(() => {});
       }
     } catch (error) {
       setMergeError(error instanceof Error ? error.message : 'Failed to pop stash');
@@ -1846,6 +1860,7 @@ export const useSessionView = (
     loadError,
     gitCommands,
     hasChangesToRebase,
+    hasStash,
     showCommitMessageDialog,
     setShowCommitMessageDialog,
     commitMessage,

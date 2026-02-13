@@ -554,9 +554,9 @@ export const SessionView = memo(() => {
         label: 'Pop Stash',
         icon: ArchiveRestore,
         onClick: hook.handleGitStashPop,
-        disabled: hook.isMerging || activeSession.status === 'running' || activeSession.status === 'initializing',
+        disabled: hook.isMerging || activeSession.status === 'running' || activeSession.status === 'initializing' || !hook.hasStash,
         variant: 'default' as const,
-        description: 'Apply and remove most recent stash'
+        description: hook.hasStash ? 'Apply and remove most recent stash' : 'No stash to pop'
       },
       // Separator - Rebase/Merge operations
       {
@@ -590,7 +590,7 @@ export const SessionView = memo(() => {
         description: sessionProject?.open_ide_command ? 'Open the worktree in your default IDE' : 'No IDE command configured'
       }
     ];
-  }, [activeSession, hook.isMerging, hook.gitCommands, hook.hasChangesToRebase, hook.handleGitPull, hook.handleGitPush, hook.handleGitFetch, hook.handleGitStash, hook.handleGitStashPop, hook.setShowCommitMessageDialog, hook.setDialogType, hook.handleRebaseMainIntoWorktree, hook.handleSquashAndRebaseToMain, hook.handleOpenIDE, hook.isOpeningIDE, sessionProject?.open_ide_command, activeSession?.gitStatus]);
+  }, [activeSession, hook.isMerging, hook.gitCommands, hook.hasChangesToRebase, hook.hasStash, hook.handleGitPull, hook.handleGitPush, hook.handleGitFetch, hook.handleGitStash, hook.handleGitStashPop, hook.setShowCommitMessageDialog, hook.setDialogType, hook.handleRebaseMainIntoWorktree, hook.handleSquashAndRebaseToMain, hook.handleOpenIDE, hook.isOpeningIDE, sessionProject?.open_ide_command, activeSession?.gitStatus]);
   
   // Removed unused variables - now handled by panels
 
