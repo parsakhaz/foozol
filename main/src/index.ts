@@ -761,14 +761,26 @@ app.on('window-all-closed', () => {
 });
 
 app.on('before-quit', async (event) => {
+  // Write directly to debug log to ensure shutdown is visible even if console override fails
+  const debugLogPath = path.join(process.cwd(), 'crystal-backend-debug.log');
+  const logToFile = (msg: string) => {
+    try {
+      fs.appendFileSync(debugLogPath, `[${new Date().toISOString()}] [SHUTDOWN] ${msg}\n`);
+    } catch { /* ignore */ }
+  };
+
+  logToFile('before-quit fired');
+
   // Guard against multiple shutdown attempts
   if (shutdownInProgress) {
+    logToFile('shutdown already in progress, skipping');
     return;
   }
 
   // Prevent default quit behavior - we'll manually exit when ready
   event.preventDefault();
   shutdownInProgress = true;
+  logToFile('shutdown started');
 
   // Check if there are active archive tasks (before try/finally so "Wait" can cancel quit)
   if (archiveProgressManager && archiveProgressManager.hasActiveTasks()) {
@@ -809,18 +821,23 @@ app.on('before-quit', async (event) => {
     // Claude needs to exit cleanly so it releases the session ID lock, allowing
     // us to resume with --resume <panelId> on next launch.
     const shutdownStartTime = Date.now();
+    logToFile('Phase 1: sending Ctrl+C to all terminals');
     console.log('[Main] Graceful shutdown: sending Ctrl+C to all terminals...');
     const signaledPanels = terminalPanelManager.sendCtrlCToAll();
+    logToFile(`Signaled ${signaledPanels.length} terminals: ${signaledPanels.join(', ')}`);
     if (signaledPanels.length > 0) {
       // Send a second Ctrl+C after a short delay to ensure Claude exits
       await new Promise(resolve => setTimeout(resolve, 200));
       terminalPanelManager.sendCtrlCToAll();
+      logToFile('Sent second Ctrl+C, waiting 4s...');
       // Wait for Claude to fully exit and release session locks
       console.log(`[Main] Waiting for ${signaledPanels.length} terminal(s) to exit (4s)...`);
       await new Promise(resolve => setTimeout(resolve, 4000));
+      logToFile('4s wait complete');
     }
 
     // Phase 2: Save terminal states and mark Claude terminals as interrupted
+    logToFile('Phase 2: saving terminal states');
     console.log('[Main] Saving terminal states...');
     await terminalPanelManager.saveAllTerminalStates();
 
@@ -846,9 +863,12 @@ app.on('before-quit', async (event) => {
         } else {
           interruptedPanels.set(panel.sessionId, [panelId]);
         }
+        logToFile(`Marked terminal panel ${panelId} as interrupted`);
         console.log(`[Main] Marked terminal panel ${panelId} as interrupted (Claude CLI, session-id = panel ID)`);
       }
     }
+
+    logToFile(`Found ${interruptedPanels.size} session(s) with interrupted terminals`);
 
     // Check CLI panels for existing agent session IDs
     if (cliManagerFactory) {
@@ -901,6 +921,7 @@ app.on('before-quit', async (event) => {
     console.log(`[Main] Graceful shutdown: marked ${interruptedPanels.size} session${interruptedPanels.size !== 1 ? 's' : ''} as interrupted`);
 
     // Kill all terminal panel PTY processes so Claude doesn't survive as an orphan
+    logToFile('Destroying all terminal panel processes');
     console.log('[Main] Destroying all terminal panel processes...');
     terminalPanelManager.destroyAllTerminals();
     console.log('[Main] Terminal panel processes destroyed');
@@ -981,11 +1002,14 @@ app.on('before-quit', async (event) => {
     }
 
     const totalShutdownTime = Date.now() - shutdownStartTime;
+    logToFile(`Graceful shutdown complete in ${Date.now() - shutdownStartTime}ms`);
     console.log(`[Main] Graceful shutdown complete in ${totalShutdownTime}ms`);
 
   } catch (error) {
+    logToFile(`ERROR during shutdown: ${error}`);
     console.error('[Main] Error during graceful shutdown:', error);
   } finally {
+    logToFile('Calling app.exit(0)');
     // Exit the app
     app.exit(0);
   }
