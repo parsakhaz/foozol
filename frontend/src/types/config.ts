@@ -1,3 +1,8 @@
+export interface CustomCommand {
+  name: string;
+  command: string;
+}
+
 export interface AppConfig {
   gitRepoPath: string;
   verbose?: boolean;
@@ -53,4 +58,6 @@ export interface AppConfig {
     posthogApiKey?: string;
     posthogHost?: string;
   };
+  // User-defined custom commands for the Add Tool picker
+  customCommands?: CustomCommand[];
 }

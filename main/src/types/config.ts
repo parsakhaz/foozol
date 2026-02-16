@@ -1,3 +1,8 @@
+export interface CustomCommand {
+  name: string;
+  command: string;
+}
+
 export interface AppConfig {
   verbose?: boolean;
   anthropicApiKey?: string;
@@ -75,6 +80,8 @@ export interface AppConfig {
     posthogHost?: string;
     distinctId?: string; // Random UUID for anonymous user identification
   };
+  // User-defined custom commands for the Add Tool picker
+  customCommands?: CustomCommand[];
 }
 
 export interface UpdateConfigRequest {
@@ -138,4 +145,6 @@ export interface UpdateConfigRequest {
     posthogHost?: string;
     distinctId?: string; // Random UUID for anonymous user identification
   };
+  // User-defined custom commands for the Add Tool picker
+  customCommands?: CustomCommand[];
 }

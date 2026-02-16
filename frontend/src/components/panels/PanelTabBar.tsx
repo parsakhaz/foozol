@@ -1,5 +1,5 @@
 import React, { useCallback, memo, useState, useRef, useEffect, useMemo } from 'react';
-import { Plus, X, Terminal, ChevronDown, MessageSquare, GitBranch, FileCode, MoreVertical, BarChart3, Code2, Edit2, PanelRight, FolderTree, TerminalSquare } from 'lucide-react';
+import { Plus, X, Terminal, ChevronDown, MessageSquare, GitBranch, FileCode, MoreVertical, BarChart3, Code2, Edit2, PanelRight, FolderTree, TerminalSquare, Trash2 } from 'lucide-react';
 import { cn } from '../../utils/cn';
 import { PanelTabBarProps, PanelCreateOptions } from '../../types/panelComponents';
 import { ToolPanel, ToolPanelType, PANEL_CAPABILITIES, LogsPanelState, BaseAIPanelState, PanelStatus } from '../../../../shared/types/panels';
@@ -8,6 +8,7 @@ import { Dropdown } from '../ui/Dropdown';
 import { useSession } from '../../contexts/SessionContext';
 import { StatusDot } from '../ui/StatusDot';
 import { StatusIndicator } from '../StatusIndicator';
+import { useConfigStore } from '../../stores/configStore';
 
 export const PanelTabBar: React.FC<PanelTabBarProps> = memo(({
   panels,
@@ -22,6 +23,7 @@ export const PanelTabBar: React.FC<PanelTabBarProps> = memo(({
   const sessionContext = useSession();
   const session = sessionContext?.session;
   const { gitBranchActions, isMerging } = sessionContext || {};
+  const { config, fetchConfig, updateConfig } = useConfigStore();
   const [showDropdown, setShowDropdown] = useState(false);
   const dropdownRef = useRef<HTMLDivElement>(null);
   const [editingPanelId, setEditingPanelId] = useState<string | null>(null);
@@ -30,6 +32,29 @@ export const PanelTabBar: React.FC<PanelTabBarProps> = memo(({
   const [showCustomInput, setShowCustomInput] = useState(false);
   const [customCommand, setCustomCommand] = useState('');
   const customInputRef = useRef<HTMLInputElement>(null);
+
+  const customCommands = config?.customCommands ?? [];
+
+  // Load config on mount if not already loaded
+  useEffect(() => {
+    if (!config) {
+      fetchConfig();
+    }
+  }, [config, fetchConfig]);
+
+  const saveCustomCommand = useCallback(async (name: string, command: string) => {
+    const existing = config?.customCommands ?? [];
+    await updateConfig({
+      customCommands: [...existing, { name, command }]
+    });
+  }, [config, updateConfig]);
+
+  const deleteCustomCommand = useCallback(async (index: number) => {
+    const existing = config?.customCommands ?? [];
+    await updateConfig({
+      customCommands: existing.filter((_, i) => i !== index)
+    });
+  }, [config, updateConfig]);
   
   // Memoize event handlers to prevent unnecessary re-renders
   const handlePanelClick = useCallback((panel: ToolPanel) => {
@@ -373,7 +398,32 @@ export const PanelTabBar: React.FC<PanelTabBarProps> = memo(({
                   <span className="ml-2">Terminal (Codex)</span>
                 </button>
               )}
-              {/* Custom Command - inline input */}
+              {/* Saved custom commands */}
+              {availablePanelTypes.includes('terminal') && customCommands.map((cmd, index) => (
+                <div key={`custom-${index}`} className="group/cmd flex items-center w-full text-sm text-text-secondary transition-colors hover:bg-surface-hover hover:text-text-primary">
+                  <button
+                    className="flex items-center flex-1 px-4 py-2 text-left min-w-0"
+                    onClick={() => handleAddPanel('terminal', {
+                      initialCommand: cmd.command,
+                      title: cmd.name
+                    })}
+                  >
+                    <TerminalSquare className="w-4 h-4 flex-shrink-0" />
+                    <span className="ml-2 truncate">{cmd.name}</span>
+                  </button>
+                  <button
+                    className="p-1.5 mr-2 rounded opacity-0 group-hover/cmd:opacity-100 transition-opacity text-text-muted hover:text-status-error"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      deleteCustomCommand(index);
+                    }}
+                    title={`Remove "${cmd.name}"`}
+                  >
+                    <Trash2 className="w-3 h-3" />
+                  </button>
+                </div>
+              ))}
+              {/* Add Custom Command input */}
               {availablePanelTypes.includes('terminal') && (
                 showCustomInput ? (
                   <div className="px-3 py-2 border-b border-border-primary">
@@ -382,14 +432,17 @@ export const PanelTabBar: React.FC<PanelTabBarProps> = memo(({
                       ref={customInputRef}
                       type="text"
                       className="w-full px-2 py-1.5 text-sm bg-surface-secondary border border-border-primary rounded text-text-primary placeholder:text-text-muted focus:outline-none focus:border-border-focus focus:ring-1 focus:ring-border-focus"
-                      placeholder="e.g. aider, wsl -- claude, bash"
+                      placeholder="e.g. aider, npm run dev, bash"
                       value={customCommand}
                       onChange={(e) => setCustomCommand(e.target.value)}
                       onKeyDown={(e) => {
                         if (e.key === 'Enter' && customCommand.trim()) {
+                          const command = customCommand.trim();
+                          const name = command.split(/\s+/).slice(0, 3).join(' ');
+                          saveCustomCommand(name, command);
                           handleAddPanel('terminal', {
-                            initialCommand: customCommand.trim(),
-                            title: customCommand.trim().split(/\s+/)[0]
+                            initialCommand: command,
+                            title: name
                           });
                           setCustomCommand('');
                           setShowCustomInput(false);
@@ -406,8 +459,8 @@ export const PanelTabBar: React.FC<PanelTabBarProps> = memo(({
                     className="flex items-center w-full px-4 py-2 text-sm text-text-secondary transition-colors hover:bg-surface-hover hover:text-text-primary text-left border-b border-border-primary"
                     onClick={() => setShowCustomInput(true)}
                   >
-                    <TerminalSquare className="w-4 h-4" />
-                    <span className="ml-2">Custom Command...</span>
+                    <Plus className="w-4 h-4" />
+                    <span className="ml-2">Add Custom Command...</span>
                   </button>
                 )
               )}
