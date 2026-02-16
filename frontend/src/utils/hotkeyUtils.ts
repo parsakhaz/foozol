@@ -4,13 +4,15 @@ import type { HotkeyDefinition } from '../stores/hotkeyStore';
 export const CATEGORY_ORDER: HotkeyDefinition['category'][] = [
   'navigation',
   'session',
+  'tabs',
   'view',
   'debug',
 ];
 
 export const CATEGORY_LABELS: Record<HotkeyDefinition['category'], string> = {
   navigation: 'Navigation',
-  session: 'Sessions',
+  session: 'Projects',
+  tabs: 'Tabs',
   view: 'View',
   debug: 'Debug',
 };

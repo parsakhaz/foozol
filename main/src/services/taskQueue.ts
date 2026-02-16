@@ -265,7 +265,8 @@ export class TaskQueue {
         } else {
         }
         
-        // Ensure diff panel exists for this session
+        // Ensure default panels exist for this session
+        await panelManager.ensureExplorerPanel(session.id);
         await panelManager.ensureDiffPanel(session.id);
 
         // Emit the session-created event BEFORE running build script so UI shows immediately

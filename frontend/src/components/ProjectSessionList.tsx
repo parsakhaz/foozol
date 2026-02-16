@@ -133,8 +133,10 @@ export function ProjectSessionList({ sessionSortAscending }: ProjectSessionListP
   const navigateToSessionsRef = useRef(navigateToSessions);
   navigateToSessionsRef.current = navigateToSessions;
 
-  // Build stable label key so we re-register when session names change
-  const sessionLabelKey = allVisibleSessions.slice(0, 9).map(s => s.name).join('|');
+  // Build stable label key so we re-register when session names/projects change
+  const sessionLabelKey = allVisibleSessions.slice(0, 9).map(s => `${s.name}:${s.projectId}`).join('|');
+  const projectsRef = useRef(projects);
+  projectsRef.current = projects;
 
   useEffect(() => {
     const ids: string[] = [];
@@ -142,14 +144,22 @@ export function ProjectSessionList({ sessionSortAscending }: ProjectSessionListP
       const id = `switch-session-${i}`;
       ids.push(id);
       const session = allVisibleSessionsRef.current[i - 1];
-      const label = session ? `Switch to ${session.name}` : `Switch to session ${i}`;
+      let label = `Switch to session ${i}`;
+      if (session) {
+        const project = projectsRef.current.find(p => p.id === session.projectId);
+        label = project
+          ? `Switch to ${session.name} (${project.name})`
+          : `Switch to ${session.name}`;
+      }
+      const idx = i - 1;
       register({
         id,
         label,
         keys: `mod+${i}`,
         category: 'session',
+        enabled: () => !!allVisibleSessionsRef.current[idx],
         action: () => {
-          const s = allVisibleSessionsRef.current[i - 1];
+          const s = allVisibleSessionsRef.current[idx];
           if (s) {
             setActiveSessionRef.current(s.id);
             navigateToSessionsRef.current();

@@ -23,10 +23,11 @@ export function CommandPalette({ isOpen, onClose }: CommandPaletteProps) {
   const getAll = useHotkeyStore((s) => s.getAll);
   const search = useHotkeyStore((s) => s.search);
 
-  // Get filtered results — exclude the command palette's own hotkey
-  const results = searchTerm
-    ? search(searchTerm).filter((h) => h.id !== 'open-command-palette')
-    : getAll().filter((h) => h.id !== 'open-command-palette');
+  // Get filtered results — exclude the command palette's own hotkey and disabled hotkeys
+  const results = (searchTerm
+    ? search(searchTerm)
+    : getAll()
+  ).filter((h) => h.id !== 'open-command-palette' && (!h.enabled || h.enabled()));
 
   const { listItems, commandCount } = buildListItems(results);
 

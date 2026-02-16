@@ -143,13 +143,28 @@ export class PanelManager {
   async ensureDiffPanel(sessionId: string): Promise<void> {
     const panels = this.getPanelsForSession(sessionId);
     const hasDiff = panels.some(p => p.type === 'diff');
-    
+
     if (!hasDiff) {
       console.log(`[PanelManager] Creating diff panel for session ${sessionId}`);
       await this.createPanel({
         sessionId,
         type: 'diff',
         title: 'Diff',
+        metadata: { permanent: true }
+      });
+    }
+  }
+
+  async ensureExplorerPanel(sessionId: string): Promise<void> {
+    const panels = this.getPanelsForSession(sessionId);
+    const hasExplorer = panels.some(p => p.type === 'explorer');
+
+    if (!hasExplorer) {
+      console.log(`[PanelManager] Creating explorer panel for session ${sessionId}`);
+      await this.createPanel({
+        sessionId,
+        type: 'explorer',
+        title: 'Explorer',
         metadata: { permanent: true }
       });
     }

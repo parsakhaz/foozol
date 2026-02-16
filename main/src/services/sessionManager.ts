@@ -7,7 +7,7 @@ import type { DatabaseService } from '../database/database';
 import type { Session as DbSession, CreateSessionData, UpdateSessionData, ConversationMessage, PromptMarker, ExecutionDiff, CreateExecutionDiffData, Project } from '../database/models';
 import { getShellPath } from '../utils/shellPath';
 import { TerminalSessionManager } from './terminalSessionManager';
-import type { BaseAIPanelState, ToolPanelState, ToolPanel } from '../../../shared/types/panels';
+import type { BaseAIPanelState, ToolPanelState, ToolPanel, ResumableSession, TerminalPanelState } from '../../../shared/types/panels';
 import { formatForDisplay } from '../utils/timestampUtils';
 import { scriptExecutionTracker } from './scriptExecutionTracker';
 
@@ -185,15 +185,26 @@ export class SessionManager extends EventEmitter {
   }
 
   initializeFromDatabase(): void {
-    // Mark any previously running sessions as stopped
-    const activeSessions = this.db.getActiveSessions();
-    const activeIds = activeSessions.map(s => s.id);
-    if (activeIds.length > 0) {
-      this.db.markSessionsAsStopped(activeIds);
-    }
-    
-    // Load all sessions from database
+    // Get all sessions from database
     const dbSessions = this.db.getAllSessions();
+
+    // Partition sessions by status
+    const activeSessions = dbSessions.filter(s => s.status === 'running' || s.status === 'pending');
+    const interruptedSessions = dbSessions.filter(s => s.status === 'interrupted');
+
+    // Mark crashed sessions (running/pending) as stopped (crash recovery)
+    if (activeSessions.length > 0) {
+      const activeIds = activeSessions.map(s => s.id);
+      this.db.markSessionsAsStopped(activeIds);
+      console.log(`[SessionManager] Marked ${activeIds.length} crashed session(s) as stopped`);
+    }
+
+    // Log interrupted sessions (these will be handled by resume dialog)
+    if (interruptedSessions.length > 0) {
+      console.log(`[SessionManager] Found ${interruptedSessions.length} interrupted session(s) available for resume`);
+    }
+
+    // Load all sessions from database
     this.emit('sessions-loaded', dbSessions.map(this.convertDbSessionToSession.bind(this)));
   }
 
@@ -242,6 +253,7 @@ export class SessionManager extends EventEmitter {
     switch (dbStatus) {
       case 'pending': return 'initializing';
       case 'running': return 'running';
+      case 'interrupted': return 'stopped'; // Map interrupted to stopped for frontend display (resume dialog handles these separately)
       case 'stopped':
       case 'completed': {
         // Show as unviewed if:
@@ -445,6 +457,7 @@ export class SessionManager extends EventEmitter {
       const existingSession = this.db.getMainRepoSession(projectId);
       if (existingSession) {
         const session = this.convertDbSessionToSession(existingSession);
+        await panelManager.ensureExplorerPanel(session.id);
         await panelManager.ensureDiffPanel(session.id);
         return session;
       }
@@ -481,6 +494,7 @@ export class SessionManager extends EventEmitter {
         undefined // commit_mode_settings - let it use project defaults
       );
       
+      await panelManager.ensureExplorerPanel(session.id);
       await panelManager.ensureDiffPanel(session.id);
       return session;
     });
@@ -975,10 +989,9 @@ export class SessionManager extends EventEmitter {
             const customState = currentState.customState || {};
             const updatedState = {
               ...currentState,
-              customState: { 
-                ...customState, 
-                agentSessionId: sessionIdFromMsg, // Use new generic field
-                claudeSessionId: sessionIdFromMsg  // Keep legacy field for backward compatibility
+              customState: {
+                ...customState,
+                agentSessionId: sessionIdFromMsg // Use new generic field (deprecated fields kept for read fallback only)
               }
             };
             this.db.updatePanel(panelId, { state: updatedState });
@@ -1725,19 +1738,19 @@ export class SessionManager extends EventEmitter {
   async preCreateTerminalSession(sessionId: string): Promise<void> {
     let session = this.activeSessions.get(sessionId);
     let worktreePath: string;
-    
+
     if (!session) {
       // Try to get session from database for terminal-only sessions
       const dbSession = this.db.getSession(sessionId);
       if (!dbSession || !dbSession.worktree_path) {
         throw new Error('Session not found');
       }
-      
+
       // Check if session is archived
       if (dbSession.archived) {
         throw new Error('Cannot create terminal for archived session');
       }
-      
+
       worktreePath = dbSession.worktree_path;
     } else {
       worktreePath = session.worktreePath;
@@ -1752,5 +1765,116 @@ export class SessionManager extends EventEmitter {
       console.error(`[SessionManager] Failed to pre-create terminal session: ${error}`);
       // Don't throw - this is a best-effort optimization
     }
+  }
+
+  getResumableSessions(projectId: number): ResumableSession[] {
+    const dbSessions = this.db.getAllSessions(projectId);
+    const interruptedSessions = dbSessions.filter(s => s.status === 'interrupted');
+
+    const result: ResumableSession[] = [];
+
+    for (const session of interruptedSessions) {
+      const panels = this.db.getPanelsForSession(session.id);
+      const resumablePanels: ResumableSession['panels'] = [];
+
+      for (const panel of panels) {
+        if (panel.type === 'terminal') {
+          const termState = panel.state?.customState as TerminalPanelState | undefined;
+          const resumeId = termState?.terminalClaudeResumeId;
+          if (resumeId) {
+            resumablePanels.push({ panelId: panel.id, panelType: 'terminal', resumeId });
+          }
+        } else if (panel.type === 'claude') {
+          const aiState = panel.state?.customState as BaseAIPanelState | undefined;
+          const resumeId = aiState?.agentSessionId || aiState?.claudeSessionId;
+          if (resumeId) {
+            resumablePanels.push({ panelId: panel.id, panelType: 'claude', resumeId });
+          }
+        }
+      }
+
+      if (resumablePanels.length > 0) {
+        result.push({
+          sessionId: session.id,
+          sessionName: session.name,
+          panels: resumablePanels
+        });
+      }
+    }
+
+    console.log(`[SessionManager] Resumable sessions for project ${projectId}: ${result.length} sessions with ${result.reduce((sum, s) => sum + s.panels.length, 0)} total panels`);
+    return result;
+  }
+
+  async resumeInterruptedSessions(sessionIds: string[]): Promise<void> {
+    const { terminalPanelManager } = await import('./terminalPanelManager');
+
+    for (const sessionId of sessionIds) {
+      const dbSession = this.db.getSession(sessionId);
+      if (!dbSession) {
+        console.warn(`[SessionManager] Session ${sessionId} not found for resume`);
+        continue;
+      }
+
+      const worktreePath = dbSession.worktree_path;
+      const panels = this.db.getPanelsForSession(sessionId);
+      let resumedPanelCount = 0;
+
+      for (const panel of panels) {
+        if (panel.type === 'terminal') {
+          const termState = panel.state?.customState as TerminalPanelState | undefined;
+          const resumeId = termState?.terminalClaudeResumeId;
+
+          if (resumeId) {
+            // Update initialCommand in panel state
+            const state = panel.state;
+            const customState = (state.customState || {}) as TerminalPanelState;
+            customState.initialCommand = `claude --resume ${resumeId}`;
+            // Clear the resume ID and interrupted flag since we're resuming
+            customState.terminalClaudeResumeId = undefined;
+            customState.wasInterrupted = undefined;
+            state.customState = customState;
+
+            // Save to DB first (critical: initializeTerminal reads from state)
+            this.db.updatePanel(panel.id, { state });
+
+            // Reload panel from DB to get fresh state
+            const reloadedPanel = this.db.getPanel(panel.id);
+            if (reloadedPanel) {
+              await terminalPanelManager.initializeTerminal(reloadedPanel, worktreePath);
+              console.log(`[SessionManager] Resumed terminal panel ${panel.id} with claude --resume ${resumeId}`);
+              resumedPanelCount++;
+            }
+          }
+        } else if (panel.type === 'claude') {
+          const aiState = panel.state?.customState as BaseAIPanelState | undefined;
+          const resumeId = aiState?.agentSessionId || aiState?.claudeSessionId;
+
+          if (resumeId) {
+            // For Claude panels, clear the interrupted status
+            // The frontend will handle triggering the actual resume via continuePanel
+            const state = panel.state;
+            const customState = (state.customState || {}) as BaseAIPanelState;
+            customState.panelStatus = 'idle';
+            state.customState = customState;
+            this.db.updatePanel(panel.id, { state });
+
+            console.log(`[SessionManager] Prepared Claude panel ${panel.id} for resume (agent session: ${resumeId})`);
+            resumedPanelCount++;
+          }
+        }
+      }
+
+      // Update session status to running
+      this.db.updateSession(sessionId, { status: 'running' });
+      console.log(`[SessionManager] Resumed session ${sessionId}: ${resumedPanelCount} panels`);
+    }
+  }
+
+  async dismissInterruptedSessions(sessionIds: string[]): Promise<void> {
+    for (const sessionId of sessionIds) {
+      this.db.updateSession(sessionId, { status: 'stopped' });
+    }
+    console.log(`[SessionManager] Dismissed ${sessionIds.length} interrupted sessions`);
   }
 }

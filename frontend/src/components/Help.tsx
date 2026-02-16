@@ -4,7 +4,8 @@ import { useHotkeyStore, type HotkeyDefinition } from '../stores/hotkeyStore';
 import { formatKeyDisplay, CATEGORY_LABELS } from '../utils/hotkeyUtils';
 
 function KeyboardShortcutsSection() {
-  const allHotkeys = useHotkeyStore((s) => s.getAll());
+  const allHotkeys = useHotkeyStore((s) => s.getAll())
+    .filter((h) => !h.enabled || h.enabled());
 
   const grouped = allHotkeys.reduce<Record<string, HotkeyDefinition[]>>((acc, def) => {
     if (!acc[def.category]) acc[def.category] = [];

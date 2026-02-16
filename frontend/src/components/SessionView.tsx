@@ -72,19 +72,27 @@ export const SessionView = memo(() => {
   useEffect(() => {
     if (activeSession?.id) {
       devLog.debug('[SessionView] Loading panels for session:', activeSession.id);
-      
+
       // Always reload panels from database when switching sessions
       // to ensure we get the latest saved state
       panelApi.loadPanelsForSession(activeSession.id).then(loadedPanels => {
         devLog.debug('[SessionView] Loaded panels:', loadedPanels);
         setPanels(activeSession.id, loadedPanels);
-      });
-      
-      panelApi.getActivePanel(activeSession.id).then(activePanel => {
-        console.log('[SessionView] Active panel from backend:', activePanel);
-        if (activePanel) {
-          setActivePanelInStore(activeSession.id, activePanel.id);
-        }
+
+        // Pick default active: prefer explorer, then diff, then first panel
+        const fallback = loadedPanels.find(p => p.type === 'explorer')
+          || loadedPanels.find(p => p.type === 'diff')
+          || loadedPanels[0];
+
+        return panelApi.getActivePanel(activeSession.id).then(activePanel => {
+          console.log('[SessionView] Active panel from backend:', activePanel);
+          if (activePanel) {
+            setActivePanelInStore(activeSession.id, activePanel.id);
+          } else if (fallback) {
+            setActivePanelInStore(activeSession.id, fallback.id);
+            panelApi.setActivePanel(activeSession.id, fallback.id);
+          }
+        });
       });
     }
   }, [activeSession?.id, setPanels, setActivePanelInStore]); // Remove panels from deps to avoid skipping reload
@@ -153,11 +161,16 @@ export const SessionView = memo(() => {
     [sessionPanels, defaultTerminalPanel]
   );
 
-  // Sort tab bar panels same as PanelTabBar: diff first, then by position
+  // Sort tab bar panels same as PanelTabBar: explorer first, diff second, then by position
   const sortedSessionPanels = useMemo(() => {
+    const typeOrder = (type: string) => {
+      if (type === 'explorer') return 0;
+      if (type === 'diff') return 1;
+      return 2;
+    };
     return [...tabBarPanels].sort((a, b) => {
-      if (a.type === 'diff') return -1;
-      if (b.type === 'diff') return 1;
+      const orderDiff = typeOrder(a.type) - typeOrder(b.type);
+      if (orderDiff !== 0) return orderDiff;
       return (a.metadata?.position ?? 0) - (b.metadata?.position ?? 0);
     });
   }, [tabBarPanels]);
@@ -250,19 +263,19 @@ export const SessionView = memo(() => {
   // Alt+1 through Alt+9 to switch between panel tabs
   const panelLabel = (i: number) => {
     const p = sortedSessionPanels[i];
-    if (!p) return `Switch to Panel Tab ${i + 1}`;
+    if (!p) return `Switch to tab ${i + 1}`;
     const name = p.type === 'diff' ? 'Diff' : p.title;
     return `Switch to ${name}`;
   };
-  useHotkey({ id: 'panel-tab-1', label: panelLabel(0), keys: 'alt+1', category: 'navigation', action: () => { const p = sortedSessionPanels[0]; if (p) handlePanelSelect(p); } });
-  useHotkey({ id: 'panel-tab-2', label: panelLabel(1), keys: 'alt+2', category: 'navigation', action: () => { const p = sortedSessionPanels[1]; if (p) handlePanelSelect(p); } });
-  useHotkey({ id: 'panel-tab-3', label: panelLabel(2), keys: 'alt+3', category: 'navigation', action: () => { const p = sortedSessionPanels[2]; if (p) handlePanelSelect(p); } });
-  useHotkey({ id: 'panel-tab-4', label: panelLabel(3), keys: 'alt+4', category: 'navigation', action: () => { const p = sortedSessionPanels[3]; if (p) handlePanelSelect(p); } });
-  useHotkey({ id: 'panel-tab-5', label: panelLabel(4), keys: 'alt+5', category: 'navigation', action: () => { const p = sortedSessionPanels[4]; if (p) handlePanelSelect(p); } });
-  useHotkey({ id: 'panel-tab-6', label: panelLabel(5), keys: 'alt+6', category: 'navigation', action: () => { const p = sortedSessionPanels[5]; if (p) handlePanelSelect(p); } });
-  useHotkey({ id: 'panel-tab-7', label: panelLabel(6), keys: 'alt+7', category: 'navigation', action: () => { const p = sortedSessionPanels[6]; if (p) handlePanelSelect(p); } });
-  useHotkey({ id: 'panel-tab-8', label: panelLabel(7), keys: 'alt+8', category: 'navigation', action: () => { const p = sortedSessionPanels[7]; if (p) handlePanelSelect(p); } });
-  useHotkey({ id: 'panel-tab-9', label: panelLabel(8), keys: 'alt+9', category: 'navigation', action: () => { const p = sortedSessionPanels[8]; if (p) handlePanelSelect(p); } });
+  useHotkey({ id: 'panel-tab-1', label: panelLabel(0), keys: 'alt+1', category: 'tabs', enabled: () => !!sortedSessionPanels[0], action: () => { const p = sortedSessionPanels[0]; if (p) handlePanelSelect(p); } });
+  useHotkey({ id: 'panel-tab-2', label: panelLabel(1), keys: 'alt+2', category: 'tabs', enabled: () => !!sortedSessionPanels[1], action: () => { const p = sortedSessionPanels[1]; if (p) handlePanelSelect(p); } });
+  useHotkey({ id: 'panel-tab-3', label: panelLabel(2), keys: 'alt+3', category: 'tabs', enabled: () => !!sortedSessionPanels[2], action: () => { const p = sortedSessionPanels[2]; if (p) handlePanelSelect(p); } });
+  useHotkey({ id: 'panel-tab-4', label: panelLabel(3), keys: 'alt+4', category: 'tabs', enabled: () => !!sortedSessionPanels[3], action: () => { const p = sortedSessionPanels[3]; if (p) handlePanelSelect(p); } });
+  useHotkey({ id: 'panel-tab-5', label: panelLabel(4), keys: 'alt+5', category: 'tabs', enabled: () => !!sortedSessionPanels[4], action: () => { const p = sortedSessionPanels[4]; if (p) handlePanelSelect(p); } });
+  useHotkey({ id: 'panel-tab-6', label: panelLabel(5), keys: 'alt+6', category: 'tabs', enabled: () => !!sortedSessionPanels[5], action: () => { const p = sortedSessionPanels[5]; if (p) handlePanelSelect(p); } });
+  useHotkey({ id: 'panel-tab-7', label: panelLabel(6), keys: 'alt+7', category: 'tabs', enabled: () => !!sortedSessionPanels[6], action: () => { const p = sortedSessionPanels[6]; if (p) handlePanelSelect(p); } });
+  useHotkey({ id: 'panel-tab-8', label: panelLabel(7), keys: 'alt+8', category: 'tabs', enabled: () => !!sortedSessionPanels[7], action: () => { const p = sortedSessionPanels[7]; if (p) handlePanelSelect(p); } });
+  useHotkey({ id: 'panel-tab-9', label: panelLabel(8), keys: 'alt+9', category: 'tabs', enabled: () => !!sortedSessionPanels[8], action: () => { const p = sortedSessionPanels[8]; if (p) handlePanelSelect(p); } });
 
   const handlePanelClose = useCallback(
     async (panel: ToolPanel) => {

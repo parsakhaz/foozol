@@ -8,7 +8,7 @@ export interface HotkeyDefinition {
   /** Key combination string, e.g. 'mod+p', 'mod+shift+n', 'mod+alt+ArrowLeft' */
   keys: string;
   /** Grouping for help dialog display */
-  category: 'navigation' | 'session' | 'view' | 'debug';
+  category: 'navigation' | 'session' | 'tabs' | 'view' | 'debug';
   /** The function to execute */
   action: () => void;
   /** Only register in development mode? */
