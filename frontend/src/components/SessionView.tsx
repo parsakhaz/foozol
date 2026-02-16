@@ -139,6 +139,29 @@ export const SessionView = memo(() => {
     [panels, activeSession?.id]
   );
 
+  // Bottom terminal panel (first terminal panel in session)
+  const defaultTerminalPanel = useMemo(
+    () => sessionPanels.find(p => p.type === 'terminal'),
+    [sessionPanels]
+  );
+
+  // Non-terminal panels for the tab bar (exclude the default terminal that's pinned to the bottom)
+  const tabBarPanels = useMemo(
+    () => defaultTerminalPanel
+      ? sessionPanels.filter(p => p.id !== defaultTerminalPanel.id)
+      : sessionPanels,
+    [sessionPanels, defaultTerminalPanel]
+  );
+
+  // Sort tab bar panels same as PanelTabBar: diff first, then by position
+  const sortedSessionPanels = useMemo(() => {
+    return [...tabBarPanels].sort((a, b) => {
+      if (a.type === 'diff') return -1;
+      if (b.type === 'diff') return 1;
+      return (a.metadata?.position ?? 0) - (b.metadata?.position ?? 0);
+    });
+  }, [tabBarPanels]);
+
   const currentActivePanel = useMemo(
     () => sessionPanels.find(p => p.id === activePanels[activeSession?.id || '']),
     [sessionPanels, activePanels, activeSession?.id]
@@ -161,7 +184,7 @@ export const SessionView = memo(() => {
   useHotkey({
     id: 'navigate-back',
     label: 'Navigate Back in Session History',
-    keys: 'mod+alt+ArrowLeft',
+    keys: 'alt+ArrowLeft',
     category: 'navigation',
     action: () => {
       const previousEntry = navigateBack();
@@ -178,7 +201,7 @@ export const SessionView = memo(() => {
   useHotkey({
     id: 'navigate-forward',
     label: 'Navigate Forward in Session History',
-    keys: 'mod+alt+ArrowRight',
+    keys: 'alt+ArrowRight',
     category: 'navigation',
     action: () => {
       const nextEntry = navigateForward();
@@ -422,12 +445,6 @@ export const SessionView = memo(() => {
     side: 'right'
   });
   
-  // Bottom terminal panel (first terminal panel in session)
-  const defaultTerminalPanel = useMemo(
-    () => sessionPanels.find(p => p.type === 'terminal'),
-    [sessionPanels]
-  );
-
   // Auto-create terminal panel for existing sessions that don't have one
   // Unless the user has explicitly closed it previously
   const hasTriedCreatingTerminal = useRef(false);
@@ -458,23 +475,6 @@ export const SessionView = memo(() => {
   useEffect(() => {
     hasTriedCreatingTerminal.current = false;
   }, [activeSession?.id]);
-
-  // Non-terminal panels for the tab bar (exclude the default terminal that's pinned to the bottom)
-  const tabBarPanels = useMemo(
-    () => defaultTerminalPanel
-      ? sessionPanels.filter(p => p.id !== defaultTerminalPanel.id)
-      : sessionPanels,
-    [sessionPanels, defaultTerminalPanel]
-  );
-
-  // Sort tab bar panels same as PanelTabBar: diff first, then by position
-  const sortedSessionPanels = useMemo(() => {
-    return [...tabBarPanels].sort((a, b) => {
-      if (a.type === 'diff') return -1;
-      if (b.type === 'diff') return 1;
-      return (a.metadata?.position ?? 0) - (b.metadata?.position ?? 0);
-    });
-  }, [tabBarPanels]);
 
   const { height: terminalHeight, startResize: startTerminalResize } = useResizableHeight({
     defaultHeight: 200,
