@@ -1,5 +1,5 @@
 import React, { useCallback, memo, useState, useRef, useEffect, useMemo } from 'react';
-import { Plus, X, Terminal, ChevronDown, MessageSquare, GitBranch, FileCode, MoreVertical, BarChart3, Code2, Edit2, PanelRight, FolderTree } from 'lucide-react';
+import { Plus, X, Terminal, ChevronDown, MessageSquare, GitBranch, FileCode, MoreVertical, BarChart3, Code2, Edit2, PanelRight, FolderTree, TerminalSquare } from 'lucide-react';
 import { cn } from '../../utils/cn';
 import { PanelTabBarProps, PanelCreateOptions } from '../../types/panelComponents';
 import { ToolPanel, ToolPanelType, PANEL_CAPABILITIES, LogsPanelState, BaseAIPanelState, PanelStatus } from '../../../../shared/types/panels';
@@ -27,6 +27,9 @@ export const PanelTabBar: React.FC<PanelTabBarProps> = memo(({
   const [editingPanelId, setEditingPanelId] = useState<string | null>(null);
   const [editingTitle, setEditingTitle] = useState('');
   const editInputRef = useRef<HTMLInputElement>(null);
+  const [showCustomInput, setShowCustomInput] = useState(false);
+  const [customCommand, setCustomCommand] = useState('');
+  const customInputRef = useRef<HTMLInputElement>(null);
   
   // Memoize event handlers to prevent unnecessary re-renders
   const handlePanelClick = useCallback((panel: ToolPanel) => {
@@ -51,6 +54,8 @@ export const PanelTabBar: React.FC<PanelTabBarProps> = memo(({
   const handleAddPanel = useCallback((type: ToolPanelType, options?: PanelCreateOptions) => {
     onPanelCreate(type, options);
     setShowDropdown(false);
+    setShowCustomInput(false);
+    setCustomCommand('');
   }, [onPanelCreate]);
   
   const handleStartRename = useCallback((e: React.MouseEvent, panel: ToolPanel) => {
@@ -101,14 +106,23 @@ export const PanelTabBar: React.FC<PanelTabBarProps> = memo(({
     const handleClickOutside = (event: MouseEvent) => {
       if (dropdownRef.current && event.target && event.target instanceof Node && !dropdownRef.current.contains(event.target)) {
         setShowDropdown(false);
+        setShowCustomInput(false);
+        setCustomCommand('');
       }
     };
-    
+
     if (showDropdown) {
       document.addEventListener('mousedown', handleClickOutside);
       return () => document.removeEventListener('mousedown', handleClickOutside);
     }
   }, [showDropdown]);
+
+  // Auto-focus custom command input when shown
+  useEffect(() => {
+    if (showCustomInput && customInputRef.current) {
+      customInputRef.current.focus();
+    }
+  }, [showCustomInput]);
   
   // Focus input when editing starts
   useEffect(() => {
@@ -349,7 +363,7 @@ export const PanelTabBar: React.FC<PanelTabBarProps> = memo(({
               {/* Terminal with Codex CLI - second option */}
               {availablePanelTypes.includes('terminal') && (
                 <button
-                  className="flex items-center w-full px-4 py-2 text-sm text-text-secondary transition-colors hover:bg-surface-hover hover:text-text-primary text-left border-b border-border-primary"
+                  className="flex items-center w-full px-4 py-2 text-sm text-text-secondary transition-colors hover:bg-surface-hover hover:text-text-primary text-left"
                   onClick={() => handleAddPanel('terminal', {
                     initialCommand: 'codex',
                     title: 'Codex CLI'
@@ -358,6 +372,44 @@ export const PanelTabBar: React.FC<PanelTabBarProps> = memo(({
                   <Terminal className="w-4 h-4" />
                   <span className="ml-2">Terminal (Codex)</span>
                 </button>
+              )}
+              {/* Custom Command - inline input */}
+              {availablePanelTypes.includes('terminal') && (
+                showCustomInput ? (
+                  <div className="px-3 py-2 border-b border-border-primary">
+                    <label className="text-xs text-text-tertiary mb-1 block">Command to run:</label>
+                    <input
+                      ref={customInputRef}
+                      type="text"
+                      className="w-full px-2 py-1.5 text-sm bg-surface-secondary border border-border-primary rounded text-text-primary placeholder:text-text-muted focus:outline-none focus:border-border-focus focus:ring-1 focus:ring-border-focus"
+                      placeholder="e.g. aider, wsl -- claude, bash"
+                      value={customCommand}
+                      onChange={(e) => setCustomCommand(e.target.value)}
+                      onKeyDown={(e) => {
+                        if (e.key === 'Enter' && customCommand.trim()) {
+                          handleAddPanel('terminal', {
+                            initialCommand: customCommand.trim(),
+                            title: customCommand.trim().split(/\s+/)[0]
+                          });
+                          setCustomCommand('');
+                          setShowCustomInput(false);
+                        }
+                        if (e.key === 'Escape') {
+                          setShowCustomInput(false);
+                          setCustomCommand('');
+                        }
+                      }}
+                    />
+                  </div>
+                ) : (
+                  <button
+                    className="flex items-center w-full px-4 py-2 text-sm text-text-secondary transition-colors hover:bg-surface-hover hover:text-text-primary text-left border-b border-border-primary"
+                    onClick={() => setShowCustomInput(true)}
+                  >
+                    <TerminalSquare className="w-4 h-4" />
+                    <span className="ml-2">Custom Command...</span>
+                  </button>
+                )
               )}
               {/* Other panel types */}
               {availablePanelTypes.map((type) => (
