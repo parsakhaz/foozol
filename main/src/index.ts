@@ -886,6 +886,11 @@ app.on('before-quit', async (event) => {
 
     console.log(`[Main] Graceful shutdown: marked ${interruptedPanels.size} session${interruptedPanels.size !== 1 ? 's' : ''} as interrupted`);
 
+    // Kill all terminal panel PTY processes so Claude doesn't survive as an orphan
+    console.log('[Main] Destroying all terminal panel processes...');
+    terminalPanelManager.destroyAllTerminals();
+    console.log('[Main] Terminal panel processes destroyed');
+
     // Phase 3: Normal cleanup (existing code)
     // Disable all spotlights and restore repo roots
     if (spotlightManager) {
