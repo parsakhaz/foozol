@@ -225,15 +225,21 @@ export const SessionView = memo(() => {
   );
 
   // Alt+1 through Alt+9 to switch between panel tabs
-  useHotkey({ id: 'panel-tab-1', label: 'Switch to Panel Tab 1', keys: 'alt+1', category: 'navigation', action: () => { const p = sortedSessionPanels[0]; if (p) handlePanelSelect(p); } });
-  useHotkey({ id: 'panel-tab-2', label: 'Switch to Panel Tab 2', keys: 'alt+2', category: 'navigation', action: () => { const p = sortedSessionPanels[1]; if (p) handlePanelSelect(p); } });
-  useHotkey({ id: 'panel-tab-3', label: 'Switch to Panel Tab 3', keys: 'alt+3', category: 'navigation', action: () => { const p = sortedSessionPanels[2]; if (p) handlePanelSelect(p); } });
-  useHotkey({ id: 'panel-tab-4', label: 'Switch to Panel Tab 4', keys: 'alt+4', category: 'navigation', action: () => { const p = sortedSessionPanels[3]; if (p) handlePanelSelect(p); } });
-  useHotkey({ id: 'panel-tab-5', label: 'Switch to Panel Tab 5', keys: 'alt+5', category: 'navigation', action: () => { const p = sortedSessionPanels[4]; if (p) handlePanelSelect(p); } });
-  useHotkey({ id: 'panel-tab-6', label: 'Switch to Panel Tab 6', keys: 'alt+6', category: 'navigation', action: () => { const p = sortedSessionPanels[5]; if (p) handlePanelSelect(p); } });
-  useHotkey({ id: 'panel-tab-7', label: 'Switch to Panel Tab 7', keys: 'alt+7', category: 'navigation', action: () => { const p = sortedSessionPanels[6]; if (p) handlePanelSelect(p); } });
-  useHotkey({ id: 'panel-tab-8', label: 'Switch to Panel Tab 8', keys: 'alt+8', category: 'navigation', action: () => { const p = sortedSessionPanels[7]; if (p) handlePanelSelect(p); } });
-  useHotkey({ id: 'panel-tab-9', label: 'Switch to Panel Tab 9', keys: 'alt+9', category: 'navigation', action: () => { const p = sortedSessionPanels[8]; if (p) handlePanelSelect(p); } });
+  const panelLabel = (i: number) => {
+    const p = sortedSessionPanels[i];
+    if (!p) return `Switch to Panel Tab ${i + 1}`;
+    const name = p.type === 'diff' ? 'Diff' : p.title;
+    return `Switch to ${name}`;
+  };
+  useHotkey({ id: 'panel-tab-1', label: panelLabel(0), keys: 'alt+1', category: 'navigation', action: () => { const p = sortedSessionPanels[0]; if (p) handlePanelSelect(p); } });
+  useHotkey({ id: 'panel-tab-2', label: panelLabel(1), keys: 'alt+2', category: 'navigation', action: () => { const p = sortedSessionPanels[1]; if (p) handlePanelSelect(p); } });
+  useHotkey({ id: 'panel-tab-3', label: panelLabel(2), keys: 'alt+3', category: 'navigation', action: () => { const p = sortedSessionPanels[2]; if (p) handlePanelSelect(p); } });
+  useHotkey({ id: 'panel-tab-4', label: panelLabel(3), keys: 'alt+4', category: 'navigation', action: () => { const p = sortedSessionPanels[3]; if (p) handlePanelSelect(p); } });
+  useHotkey({ id: 'panel-tab-5', label: panelLabel(4), keys: 'alt+5', category: 'navigation', action: () => { const p = sortedSessionPanels[4]; if (p) handlePanelSelect(p); } });
+  useHotkey({ id: 'panel-tab-6', label: panelLabel(5), keys: 'alt+6', category: 'navigation', action: () => { const p = sortedSessionPanels[5]; if (p) handlePanelSelect(p); } });
+  useHotkey({ id: 'panel-tab-7', label: panelLabel(6), keys: 'alt+7', category: 'navigation', action: () => { const p = sortedSessionPanels[6]; if (p) handlePanelSelect(p); } });
+  useHotkey({ id: 'panel-tab-8', label: panelLabel(7), keys: 'alt+8', category: 'navigation', action: () => { const p = sortedSessionPanels[7]; if (p) handlePanelSelect(p); } });
+  useHotkey({ id: 'panel-tab-9', label: panelLabel(8), keys: 'alt+9', category: 'navigation', action: () => { const p = sortedSessionPanels[8]; if (p) handlePanelSelect(p); } });
 
   const handlePanelClose = useCallback(
     async (panel: ToolPanel) => {

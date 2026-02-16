@@ -125,7 +125,7 @@ export function ProjectSessionList({ sessionSortAscending }: ProjectSessionListP
     return result;
   }, [projects, expandedProjects, sessionsByProject]);
 
-  // Register ⌘1-⌘9 hotkeys
+  // Register ⌘1-⌘9 hotkeys with dynamic session name labels
   const allVisibleSessionsRef = useRef(allVisibleSessions);
   allVisibleSessionsRef.current = allVisibleSessions;
   const setActiveSessionRef = useRef(setActiveSession);
@@ -133,14 +133,19 @@ export function ProjectSessionList({ sessionSortAscending }: ProjectSessionListP
   const navigateToSessionsRef = useRef(navigateToSessions);
   navigateToSessionsRef.current = navigateToSessions;
 
+  // Build stable label key so we re-register when session names change
+  const sessionLabelKey = allVisibleSessions.slice(0, 9).map(s => s.name).join('|');
+
   useEffect(() => {
     const ids: string[] = [];
     for (let i = 1; i <= 9; i++) {
       const id = `switch-session-${i}`;
       ids.push(id);
+      const session = allVisibleSessionsRef.current[i - 1];
+      const label = session ? `Switch to ${session.name}` : `Switch to session ${i}`;
       register({
         id,
-        label: `Switch to session ${i}`,
+        label,
         keys: `mod+${i}`,
         category: 'session',
         action: () => {
@@ -153,7 +158,7 @@ export function ProjectSessionList({ sessionSortAscending }: ProjectSessionListP
       });
     }
     return () => ids.forEach(id => unregister(id));
-  }, [register, unregister]);
+  }, [register, unregister, sessionLabelKey]);
 
   // Auto-expand projects with active session or that have sessions
   useEffect(() => {
