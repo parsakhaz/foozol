@@ -40,8 +40,14 @@ import { CliManagerFactory } from './services/cliManagerFactory';
 import { AbstractCliManager } from './services/panels/cli/AbstractCliManager';
 import { setupConsoleWrapper } from './utils/consoleWrapper';
 import * as fs from 'fs';
+import { terminalPanelManager } from './services/terminalPanelManager';
+import { panelManager } from './services/panelManager';
+import { TerminalPanelState, BaseAIPanelState } from '../../shared/types/panels';
 
 export let mainWindow: BrowserWindow | null = null;
+
+// Module-level shutdown guard to prevent multiple shutdown attempts
+let shutdownInProgress = false;
 
 /**
  * Set the application title based on development mode and worktree
@@ -755,113 +761,214 @@ app.on('window-all-closed', () => {
 });
 
 app.on('before-quit', async (event) => {
-  // Check if there are active archive tasks
-  if (archiveProgressManager && archiveProgressManager.hasActiveTasks()) {
-    event.preventDefault();
-    
-    console.log('[Main] Archive tasks in progress, showing warning dialog...');
-    const activeCount = archiveProgressManager.getActiveTaskCount();
-    const choice = mainWindow 
-      ? dialog.showMessageBoxSync(mainWindow, {
-          type: 'warning',
-          title: 'Archive Tasks In Progress',
-          message: `Crystal is removing ${activeCount} worktree${activeCount > 1 ? 's' : ''} in the background.`,
-          detail: 'Git worktree removal can take time, especially for large repositories with many files. If you quit now, the worktree directories may not be fully cleaned up and you may need to remove them manually.\n\nDo you want to quit anyway?',
-          buttons: ['Wait', 'Quit Anyway'],
-          defaultId: 0,
-          cancelId: 0
-        })
-      : dialog.showMessageBoxSync({
-          type: 'warning',
-          title: 'Archive Tasks In Progress',
-          message: `Crystal is removing ${activeCount} worktree${activeCount > 1 ? 's' : ''} in the background.`,
-          detail: 'Git worktree removal can take time, especially for large repositories with many files. If you quit now, the worktree directories may not be fully cleaned up and you may need to remove them manually.\n\nDo you want to quit anyway?',
-          buttons: ['Wait', 'Quit Anyway'],
-          defaultId: 0,
-          cancelId: 0
-        });
-    
-    if (choice === 1) {
-      // User chose to quit anyway
-      archiveProgressManager.clearAll();
-      app.exit(0);
-    }
-    // Otherwise, the quit is cancelled and app continues
+  // Guard against multiple shutdown attempts
+  if (shutdownInProgress) {
     return;
   }
 
-  // Disable all spotlights and restore repo roots
-  if (spotlightManager) {
-    console.log('[Main] Disabling all spotlights...');
-    spotlightManager.disableAll();
-    console.log('[Main] Spotlights disabled');
-  }
+  // Prevent default quit behavior - we'll manually exit when ready
+  event.preventDefault();
+  shutdownInProgress = true;
 
-  // Cleanup all sessions and terminate child processes
-  if (sessionManager) {
-    console.log('[Main] Cleaning up sessions and terminating child processes...');
-    await sessionManager.cleanup();
-    console.log('[Main] Session cleanup complete');
-  }
+  try {
+    // Check if there are active archive tasks
+    if (archiveProgressManager && archiveProgressManager.hasActiveTasks()) {
+      console.log('[Main] Archive tasks in progress, showing warning dialog...');
+      const activeCount = archiveProgressManager.getActiveTaskCount();
+      const choice = mainWindow
+        ? dialog.showMessageBoxSync(mainWindow, {
+            type: 'warning',
+            title: 'Archive Tasks In Progress',
+            message: `Crystal is removing ${activeCount} worktree${activeCount > 1 ? 's' : ''} in the background.`,
+            detail: 'Git worktree removal can take time, especially for large repositories with many files. If you quit now, the worktree directories may not be fully cleaned up and you may need to remove them manually.\n\nDo you want to quit anyway?',
+            buttons: ['Wait', 'Quit Anyway'],
+            defaultId: 0,
+            cancelId: 0
+          })
+        : dialog.showMessageBoxSync({
+            type: 'warning',
+            title: 'Archive Tasks In Progress',
+            message: `Crystal is removing ${activeCount} worktree${activeCount > 1 ? 's' : ''} in the background.`,
+            detail: 'Git worktree removal can take time, especially for large repositories with many files. If you quit now, the worktree directories may not be fully cleaned up and you may need to remove them manually.\n\nDo you want to quit anyway?',
+            buttons: ['Wait', 'Quit Anyway'],
+            defaultId: 0,
+            cancelId: 0
+          });
 
-  // Stop all run commands
-  if (runCommandManager) {
-    console.log('[Main] Stopping all run commands...');
-    await runCommandManager.stopAllRunCommands();
-    console.log('[Main] Run commands stopped');
-  }
-  
-  // Stop git status polling
-  if (gitStatusManager) {
-    console.log('[Main] Stopping git status polling...');
-    gitStatusManager.stopPolling();
-    console.log('[Main] Git status polling stopped');
-  }
+      if (choice === 0) {
+        // User chose to wait - reset guard and cancel quit
+        shutdownInProgress = false;
+        return;
+      }
 
-  // Shutdown CLI manager factory and all CLI processes
-  if (cliManagerFactory) {
-    console.log('[Main] Shutting down CLI manager factory and all CLI processes...');
-    await cliManagerFactory.shutdown();
-    console.log('[Main] CLI manager factory shutdown complete');
-  }
-
-  // Close task queue
-  if (taskQueue) {
-    await taskQueue.close();
-  }
-
-  // Stop permission IPC server
-  if (permissionIpcServer) {
-    console.log('[Main] Stopping permission IPC server...');
-    await permissionIpcServer.stop();
-    console.log('[Main] Permission IPC server stopped');
-  }
-  
-  // Stop version checker
-  if (versionChecker) {
-    versionChecker.stopPeriodicCheck();
-  }
-
-  // Track app closed event with session duration
-  if (analyticsManager && appStartTime) {
-    try {
-      const sessionDurationSeconds = Math.floor((Date.now() - appStartTime) / 1000);
-      console.log(`[Analytics] App closed after ${sessionDurationSeconds} seconds`);
-      analyticsManager.track('app_closed', {
-        session_duration_seconds: sessionDurationSeconds
-      });
-
-      // Flush analytics events before shutdown
-      await analyticsManager.flush();
-      await analyticsManager.shutdown();
-    } catch (error) {
-      console.error('[Analytics] Failed to track app_closed event:', error);
+      // User chose to quit anyway
+      archiveProgressManager.clearAll();
     }
-  }
 
-  // Close logger to ensure all logs are flushed
-  if (logger) {
-    logger.close();
+    // Phase 1: Save terminal states and mark Claude terminals as interrupted
+    // Since we pass --session-id <panelId> on startup, we already know the resume ID
+    // (it's just the panel ID). No need for scrollback scanning or graceful exit.
+    const shutdownStartTime = Date.now();
+    console.log('[Main] Graceful shutdown: saving terminal states...');
+    await terminalPanelManager.saveAllTerminalStates();
+
+    const interruptedPanels = new Map<string, string[]>(); // sessionId → panelIds
+
+    // Find all terminal panels running Claude and mark them as interrupted
+    const allTerminalPanelIds = terminalPanelManager.getAllPanelIds();
+    for (const panelId of allTerminalPanelIds) {
+      const panel = panelManager.getPanel(panelId);
+      if (!panel) continue;
+
+      const customState = (panel.state?.customState || {}) as TerminalPanelState;
+      const hadClaude = customState.initialCommand && customState.initialCommand.toLowerCase().includes('claude');
+
+      if (hadClaude) {
+        customState.wasInterrupted = true;
+        panel.state.customState = customState;
+        await panelManager.updatePanel(panelId, { state: panel.state });
+
+        const existing = interruptedPanels.get(panel.sessionId);
+        if (existing) {
+          existing.push(panelId);
+        } else {
+          interruptedPanels.set(panel.sessionId, [panelId]);
+        }
+        console.log(`[Main] Marked terminal panel ${panelId} as interrupted (Claude CLI, session-id = panel ID)`);
+      }
+    }
+
+    // Check CLI panels for existing agent session IDs
+    if (cliManagerFactory) {
+      const cliManagers = cliManagerFactory.getManager('claude');
+      if (cliManagers) {
+        // Get all CLI panels from all sessions
+        const allSessions = sessionManager ? sessionManager.getAllSessions() : [];
+        for (const session of allSessions) {
+          const panels = panelManager.getPanelsForSession(session.id);
+          for (const panel of panels) {
+            if (panel.type === 'claude' || panel.type === 'codex') {
+              const agentSessionId = sessionManager?.getPanelAgentSessionId(panel.id);
+              if (agentSessionId) {
+                // Update panel status to interrupted
+                const state = panel.state;
+                const customState = (state.customState || {}) as BaseAIPanelState;
+                customState.panelStatus = 'interrupted';
+                state.customState = customState;
+
+                await panelManager.updatePanel(panel.id, { state });
+
+                // Track for session update
+                const existing = interruptedPanels.get(panel.sessionId);
+                if (existing) {
+                  existing.push(panel.id);
+                } else {
+                  interruptedPanels.set(panel.sessionId, [panel.id]);
+                }
+
+                console.log(`[Main] Marked ${panel.type} panel ${panel.id} as interrupted (agent session ID: ${agentSessionId})`);
+              }
+            }
+          }
+        }
+      }
+    }
+
+    console.log(`[Main] Graceful shutdown: found ${interruptedPanels.size} session(s) with interrupted Claude terminals`);
+
+    // Phase 2: Mark sessions as interrupted in DB
+    for (const [sessionId, panelIds] of interruptedPanels) {
+      if (databaseService) {
+        databaseService.updateSession(sessionId, { status: 'interrupted' });
+        console.log(`[Main] Marked session ${sessionId} as interrupted (${panelIds.length} panel${panelIds.length > 1 ? 's' : ''})`);
+      }
+    }
+
+    console.log(`[Main] Graceful shutdown: marked ${interruptedPanels.size} session${interruptedPanels.size !== 1 ? 's' : ''} as interrupted`);
+
+    // Phase 3: Normal cleanup (existing code)
+    // Disable all spotlights and restore repo roots
+    if (spotlightManager) {
+      console.log('[Main] Disabling all spotlights...');
+      spotlightManager.disableAll();
+      console.log('[Main] Spotlights disabled');
+    }
+
+    // Cleanup all sessions and terminate child processes
+    if (sessionManager) {
+      console.log('[Main] Cleaning up sessions and terminating child processes...');
+      await sessionManager.cleanup();
+      console.log('[Main] Session cleanup complete');
+    }
+
+    // Stop all run commands
+    if (runCommandManager) {
+      console.log('[Main] Stopping all run commands...');
+      await runCommandManager.stopAllRunCommands();
+      console.log('[Main] Run commands stopped');
+    }
+
+    // Stop git status polling
+    if (gitStatusManager) {
+      console.log('[Main] Stopping git status polling...');
+      gitStatusManager.stopPolling();
+      console.log('[Main] Git status polling stopped');
+    }
+
+    // Shutdown CLI manager factory and all CLI processes
+    if (cliManagerFactory) {
+      console.log('[Main] Shutting down CLI manager factory and all CLI processes...');
+      await cliManagerFactory.shutdown();
+      console.log('[Main] CLI manager factory shutdown complete');
+    }
+
+    // Close task queue
+    if (taskQueue) {
+      await taskQueue.close();
+    }
+
+    // Stop permission IPC server
+    if (permissionIpcServer) {
+      console.log('[Main] Stopping permission IPC server...');
+      await permissionIpcServer.stop();
+      console.log('[Main] Permission IPC server stopped');
+    }
+
+    // Stop version checker
+    if (versionChecker) {
+      versionChecker.stopPeriodicCheck();
+    }
+
+    // Track app closed event with session duration
+    if (analyticsManager && appStartTime) {
+      try {
+        const sessionDurationSeconds = Math.floor((Date.now() - appStartTime) / 1000);
+        console.log(`[Analytics] App closed after ${sessionDurationSeconds} seconds`);
+        analyticsManager.track('app_closed', {
+          session_duration_seconds: sessionDurationSeconds
+        });
+
+        // Flush analytics events before shutdown
+        await analyticsManager.flush();
+        await analyticsManager.shutdown();
+      } catch (error) {
+        console.error('[Analytics] Failed to track app_closed event:', error);
+      }
+    }
+
+    // Close logger to ensure all logs are flushed
+    if (logger) {
+      logger.close();
+    }
+
+    const totalShutdownTime = Date.now() - shutdownStartTime;
+    console.log(`[Main] Graceful shutdown complete in ${totalShutdownTime}ms`);
+
+  } catch (error) {
+    console.error('[Main] Error during graceful shutdown:', error);
+  } finally {
+    // Exit the app
+    app.exit(0);
   }
 });
 

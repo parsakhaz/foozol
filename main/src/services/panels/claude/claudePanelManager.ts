@@ -110,7 +110,7 @@ export class ClaudePanelManager extends AbstractAIPanelManager {
     // Transform base state to Claude-specific state
     return {
       isInitialized: baseState.isInitialized,
-      claudeResumeId: baseState.resumeId, // Map resumeId to claudeResumeId for Claude
+      agentSessionId: baseState.resumeId, // Use generic field instead of deprecated claudeResumeId
       lastActivityTime: baseState.lastActivityTime
     };
   }

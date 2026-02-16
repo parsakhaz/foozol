@@ -356,6 +356,13 @@ export class CliToolRegistry extends EventEmitter {
   }
 
   /**
+   * Get all active manager instances
+   */
+  public getAllManagers(): AbstractCliManager[] {
+    return Array.from(this.managers.values());
+  }
+
+  /**
    * Check if a CLI tool is available on the system
    */
   public async checkToolAvailability(toolId: string): Promise<ToolAvailabilityResult> {

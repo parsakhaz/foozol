@@ -1699,7 +1699,7 @@ export class DatabaseService {
             .run(
               panelId,
               session.id,
-              JSON.stringify({ claudeResumeId: session.claude_session_id }),
+              JSON.stringify({ agentSessionId: session.claude_session_id }), // Use generic field for consistency
             );
 
           // Create Claude panel settings with default model from config

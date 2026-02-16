@@ -317,7 +317,7 @@ export class CodexPanelManager extends AbstractAIPanelManager {
     // Transform base state to Codex-specific state
     return {
       isInitialized: baseState.isInitialized,
-      codexResumeId: baseState.resumeId,
+      agentSessionId: baseState.resumeId, // Use generic field instead of deprecated codexResumeId
       lastActivityTime: baseState.lastActivityTime,
       lastPrompt: config?.prompt,
       model: config?.model || DEFAULT_CODEX_MODEL,
