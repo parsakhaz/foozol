@@ -879,7 +879,8 @@ app.on('before-quit', async (event) => {
         for (const session of allSessions) {
           const panels = panelManager.getPanelsForSession(session.id);
           for (const panel of panels) {
-            if (panel.type === 'claude' || panel.type === 'codex') {
+            if (panel.type === 'claude') {
+              // Only mark Claude CLI panels — Codex doesn't support resume yet
               const agentSessionId = sessionManager?.getPanelAgentSessionId(panel.id);
               const customState = (panel.state?.customState || {}) as BaseAIPanelState;
               const isActive = customState.panelStatus === 'running' || customState.panelStatus === 'waiting';
