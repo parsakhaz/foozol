@@ -829,11 +829,11 @@ app.on('before-quit', async (event) => {
       // Send a second Ctrl+C after a short delay to ensure Claude exits
       await new Promise(resolve => setTimeout(resolve, 200));
       terminalPanelManager.sendCtrlCToAll();
-      logToFile('Sent second Ctrl+C, waiting 4s...');
+      logToFile('Sent second Ctrl+C, waiting 2s...');
       // Wait for Claude to fully exit and release session locks
-      console.log(`[Main] Waiting for ${signaledPanels.length} terminal(s) to exit (4s)...`);
-      await new Promise(resolve => setTimeout(resolve, 4000));
-      logToFile('4s wait complete');
+      console.log(`[Main] Waiting for ${signaledPanels.length} terminal(s) to exit (2s)...`);
+      await new Promise(resolve => setTimeout(resolve, 2000));
+      logToFile('2s wait complete');
     }
 
     // Phase 2: Save terminal states and mark Claude terminals as interrupted
