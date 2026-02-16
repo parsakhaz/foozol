@@ -816,8 +816,8 @@ app.on('before-quit', async (event) => {
       await new Promise(resolve => setTimeout(resolve, 200));
       terminalPanelManager.sendCtrlCToAll();
       // Wait for Claude to fully exit and release session locks
-      console.log(`[Main] Waiting for ${signaledPanels.length} terminal(s) to exit...`);
-      await new Promise(resolve => setTimeout(resolve, 2000));
+      console.log(`[Main] Waiting for ${signaledPanels.length} terminal(s) to exit (4s)...`);
+      await new Promise(resolve => setTimeout(resolve, 4000));
     }
 
     // Phase 2: Save terminal states and mark Claude terminals as interrupted
