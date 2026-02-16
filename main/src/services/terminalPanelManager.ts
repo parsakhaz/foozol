@@ -111,15 +111,29 @@ export class TerminalPanelManager {
 
     // Execute initial command if provided (e.g., "claude --dangerously-skip-permissions")
     if (initialCommand) {
-      // If this is a Claude CLI command, inject --session-id so we can resume later
-      // Skip injection if already has --session-id or --resume (e.g., during resume flow)
       let commandToRun = initialCommand;
+
+      // If this is a Claude CLI command, inject --session-id or --resume
       if (
         initialCommand.toLowerCase().includes('claude') &&
         !initialCommand.includes('--session-id') &&
         !initialCommand.includes('--resume')
       ) {
-        commandToRun = `${initialCommand} --session-id ${panel.id}`;
+        const termState = existingState as TerminalPanelState | undefined;
+        if (termState?.hasClaudeSessionId) {
+          // Session ID was already used before — resume instead of creating new
+          commandToRun = `claude --resume ${panel.id} --dangerously-skip-permissions`;
+        } else {
+          // First time — create session with panel ID
+          commandToRun = `${initialCommand} --session-id ${panel.id}`;
+        }
+
+        // Mark that we've assigned a session ID to this panel
+        const updatedState = panel.state;
+        const cs = (updatedState.customState || {}) as TerminalPanelState;
+        cs.hasClaudeSessionId = true;
+        updatedState.customState = cs;
+        panelManager.updatePanel(panel.id, { state: updatedState });
       }
 
       // Small delay to ensure shell is ready

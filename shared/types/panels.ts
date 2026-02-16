@@ -39,6 +39,7 @@ export interface TerminalPanelState {
 
   // Auto-resume state (for graceful shutdown/restart)
   wasInterrupted?: boolean;          // Whether this terminal was active when app shutdown occurred
+  hasClaudeSessionId?: boolean;      // Whether --session-id was already passed to Claude (use --resume next time)
 }
 
 export interface DiffPanelState {
