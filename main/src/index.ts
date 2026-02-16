@@ -805,11 +805,23 @@ app.on('before-quit', async (event) => {
       archiveProgressManager.clearAll();
     }
 
-    // Phase 1: Save terminal states and mark Claude terminals as interrupted
-    // Since we pass --session-id <panelId> on startup, we already know the resume ID
-    // (it's just the panel ID). No need for scrollback scanning or graceful exit.
+    // Phase 1: Send Ctrl+C to all terminals to gracefully exit Claude instances
+    // Claude needs to exit cleanly so it releases the session ID lock, allowing
+    // us to resume with --resume <panelId> on next launch.
     const shutdownStartTime = Date.now();
-    console.log('[Main] Graceful shutdown: saving terminal states...');
+    console.log('[Main] Graceful shutdown: sending Ctrl+C to all terminals...');
+    const signaledPanels = terminalPanelManager.sendCtrlCToAll();
+    if (signaledPanels.length > 0) {
+      // Send a second Ctrl+C after a short delay to ensure Claude exits
+      await new Promise(resolve => setTimeout(resolve, 200));
+      terminalPanelManager.sendCtrlCToAll();
+      // Wait for Claude to fully exit and release session locks
+      console.log(`[Main] Waiting for ${signaledPanels.length} terminal(s) to exit...`);
+      await new Promise(resolve => setTimeout(resolve, 2000));
+    }
+
+    // Phase 2: Save terminal states and mark Claude terminals as interrupted
+    console.log('[Main] Saving terminal states...');
     await terminalPanelManager.saveAllTerminalStates();
 
     const interruptedPanels = new Map<string, string[]>(); // sessionId → panelIds
@@ -876,7 +888,7 @@ app.on('before-quit', async (event) => {
 
     console.log(`[Main] Graceful shutdown: found ${interruptedPanels.size} session(s) with interrupted Claude terminals`);
 
-    // Phase 2: Mark sessions as interrupted in DB
+    // Phase 3: Mark sessions as interrupted in DB
     for (const [sessionId, panelIds] of interruptedPanels) {
       if (databaseService) {
         databaseService.updateSession(sessionId, { status: 'interrupted' });
@@ -891,7 +903,7 @@ app.on('before-quit', async (event) => {
     terminalPanelManager.destroyAllTerminals();
     console.log('[Main] Terminal panel processes destroyed');
 
-    // Phase 3: Normal cleanup (existing code)
+    // Phase 4: Normal cleanup (existing code)
     // Disable all spotlights and restore repo roots
     if (spotlightManager) {
       console.log('[Main] Disabling all spotlights...');
