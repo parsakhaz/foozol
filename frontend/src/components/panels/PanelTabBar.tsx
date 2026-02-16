@@ -9,6 +9,8 @@ import { useSession } from '../../contexts/SessionContext';
 import { StatusDot } from '../ui/StatusDot';
 import { StatusIndicator } from '../StatusIndicator';
 import { useConfigStore } from '../../stores/configStore';
+import { formatKeyDisplay } from '../../utils/hotkeyUtils';
+import { Tooltip } from '../ui/Tooltip';
 
 export const PanelTabBar: React.FC<PanelTabBarProps> = memo(({
   panels,
@@ -266,7 +268,7 @@ export const PanelTabBar: React.FC<PanelTabBarProps> = memo(({
         {session && (
           <div className="flex items-center gap-2 px-2 mr-1 flex-shrink-0 border-r border-border-primary">
             <StatusIndicator session={session} size="small" />
-            <span className="text-sm text-text-secondary truncate min-w-0" style={{ maxWidth: '140px' }}>
+            <span className="text-sm text-text-secondary truncate min-w-0 select-none" style={{ maxWidth: '140px' }}>
               {sessionContext?.projectName || session.name}
             </span>
           </div>
@@ -275,16 +277,16 @@ export const PanelTabBar: React.FC<PanelTabBarProps> = memo(({
         {/* Scrollable tab area */}
         <div className="flex items-center gap-x-1 overflow-x-auto scrollbar-none min-w-0 flex-1">
           {/* Render panel tabs */}
-          {sortedPanels.map((panel) => {
+          {sortedPanels.map((panel, index) => {
           const isPermanent = panel.metadata?.permanent === true;
           const isEditing = editingPanelId === panel.id;
           const isDiffPanel = panel.type === 'diff';
           const displayTitle = isDiffPanel ? 'Diff' : panel.title;
           const statusConfig = getPanelStatusConfig(panel);
+          const shortcutHint = index < 9 ? formatKeyDisplay(`alt+${index + 1}`) : undefined;
 
-          return (
+          const tab = (
             <div
-              key={panel.id}
               className={cn(
                 "group relative inline-flex items-center h-9 px-3 text-sm whitespace-nowrap cursor-pointer select-none",
                 activePanel?.id === panel.id
@@ -292,7 +294,6 @@ export const PanelTabBar: React.FC<PanelTabBarProps> = memo(({
                   : "text-text-tertiary hover:text-text-primary hover:bg-surface-hover"
               )}
               onClick={() => !isEditing && handlePanelClick(panel)}
-              title={isPermanent ? "This panel cannot be closed" : undefined}
               role="tab"
               aria-selected={activePanel?.id === panel.id}
               tabIndex={activePanel?.id === panel.id ? 0 : -1}
@@ -315,7 +316,7 @@ export const PanelTabBar: React.FC<PanelTabBarProps> = memo(({
                 />
               )}
               {getPanelIcon(panel.type)}
-              
+
               {isEditing ? (
                 <input
                   ref={editInputRef}
@@ -342,7 +343,7 @@ export const PanelTabBar: React.FC<PanelTabBarProps> = memo(({
                   )}
                 </>
               )}
-              
+
               {!isPermanent && !isEditing && (
                 <button
                   className="ml-1 p-0.5 rounded transition-colors text-text-muted hover:bg-surface-hover hover:text-status-error focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-focus-ring-subtle"
@@ -353,6 +354,16 @@ export const PanelTabBar: React.FC<PanelTabBarProps> = memo(({
               )}
             </div>
           );
+
+          return shortcutHint ? (
+            <Tooltip
+              key={panel.id}
+              content={<kbd className="px-1.5 py-0.5 text-xs font-mono bg-surface-tertiary rounded">{shortcutHint}</kbd>}
+              side="bottom"
+            >
+              {tab}
+            </Tooltip>
+          ) : <React.Fragment key={panel.id}>{tab}</React.Fragment>;
         })}
 
         </div>

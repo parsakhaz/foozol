@@ -191,7 +191,7 @@ export const SessionView = memo(() => {
       }
     },
   });
-  
+
   // Debug logging - only in development with verbose enabled
   renderLog('[SessionView] Session panels:', sessionPanels);
   renderLog('[SessionView] Active panel ID:', activePanels[activeSession?.id || '']);
@@ -223,6 +223,17 @@ export const SessionView = memo(() => {
     },
     [activeSession, setActivePanelInStore, addToHistory]
   );
+
+  // Alt+1 through Alt+9 to switch between panel tabs
+  useHotkey({ id: 'panel-tab-1', label: 'Switch to Panel Tab 1', keys: 'alt+1', category: 'navigation', action: () => { const p = sortedSessionPanels[0]; if (p) handlePanelSelect(p); } });
+  useHotkey({ id: 'panel-tab-2', label: 'Switch to Panel Tab 2', keys: 'alt+2', category: 'navigation', action: () => { const p = sortedSessionPanels[1]; if (p) handlePanelSelect(p); } });
+  useHotkey({ id: 'panel-tab-3', label: 'Switch to Panel Tab 3', keys: 'alt+3', category: 'navigation', action: () => { const p = sortedSessionPanels[2]; if (p) handlePanelSelect(p); } });
+  useHotkey({ id: 'panel-tab-4', label: 'Switch to Panel Tab 4', keys: 'alt+4', category: 'navigation', action: () => { const p = sortedSessionPanels[3]; if (p) handlePanelSelect(p); } });
+  useHotkey({ id: 'panel-tab-5', label: 'Switch to Panel Tab 5', keys: 'alt+5', category: 'navigation', action: () => { const p = sortedSessionPanels[4]; if (p) handlePanelSelect(p); } });
+  useHotkey({ id: 'panel-tab-6', label: 'Switch to Panel Tab 6', keys: 'alt+6', category: 'navigation', action: () => { const p = sortedSessionPanels[5]; if (p) handlePanelSelect(p); } });
+  useHotkey({ id: 'panel-tab-7', label: 'Switch to Panel Tab 7', keys: 'alt+7', category: 'navigation', action: () => { const p = sortedSessionPanels[6]; if (p) handlePanelSelect(p); } });
+  useHotkey({ id: 'panel-tab-8', label: 'Switch to Panel Tab 8', keys: 'alt+8', category: 'navigation', action: () => { const p = sortedSessionPanels[7]; if (p) handlePanelSelect(p); } });
+  useHotkey({ id: 'panel-tab-9', label: 'Switch to Panel Tab 9', keys: 'alt+9', category: 'navigation', action: () => { const p = sortedSessionPanels[8]; if (p) handlePanelSelect(p); } });
 
   const handlePanelClose = useCallback(
     async (panel: ToolPanel) => {
@@ -450,6 +461,15 @@ export const SessionView = memo(() => {
     [sessionPanels, defaultTerminalPanel]
   );
 
+  // Sort tab bar panels same as PanelTabBar: diff first, then by position
+  const sortedSessionPanels = useMemo(() => {
+    return [...tabBarPanels].sort((a, b) => {
+      if (a.type === 'diff') return -1;
+      if (b.type === 'diff') return 1;
+      return (a.metadata?.position ?? 0) - (b.metadata?.position ?? 0);
+    });
+  }, [tabBarPanels]);
+
   const { height: terminalHeight, startResize: startTerminalResize } = useResizableHeight({
     defaultHeight: 200,
     minHeight: 100,
@@ -457,10 +477,10 @@ export const SessionView = memo(() => {
     storageKey: 'crystal-bottom-terminal-height',
   });
 
-  // Terminal collapse state with localStorage persistence
+  // Terminal collapse state with localStorage persistence (collapsed by default)
   const [isTerminalCollapsed, setIsTerminalCollapsed] = useState(() => {
     const stored = localStorage.getItem('crystal-terminal-collapsed');
-    return stored === 'true';
+    return stored === null ? true : stored === 'true';
   });
 
   const toggleTerminalCollapse = useCallback(() => {
