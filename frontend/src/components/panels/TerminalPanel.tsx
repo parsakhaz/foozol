@@ -221,16 +221,24 @@ export const TerminalPanel: React.FC<TerminalPanelProps> = React.memo(({ panel, 
   useEffect(() => {
     if (isActive && fitAddonRef.current && xtermRef.current) {
       console.log('[TerminalPanel] Panel became active, fitting terminal');
-      // Small delay to ensure DOM is ready
-      setTimeout(() => {
-        if (fitAddonRef.current) {
-          fitAddonRef.current.fit();
-          const dimensions = fitAddonRef.current.proposeDimensions();
-          if (dimensions) {
-            window.electronAPI.invoke('terminal:resize', panel.id, dimensions.cols, dimensions.rows);
+      // Use requestAnimationFrame to ensure the DOM has reflowed after display: none -> block,
+      // then fit. If the container still has tiny dimensions, retry after a longer delay.
+      const fitTerminal = () => {
+        if (!fitAddonRef.current) return;
+        fitAddonRef.current.fit();
+        const dimensions = fitAddonRef.current.proposeDimensions();
+        if (dimensions) {
+          window.electronAPI.invoke('terminal:resize', panel.id, dimensions.cols, dimensions.rows);
+          // If cols are suspiciously small, the reflow hasn't happened yet — retry
+          if (dimensions.cols < 20) {
+            console.log('[TerminalPanel] Cols too small after fit:', dimensions.cols, '- retrying');
+            setTimeout(fitTerminal, 150);
           }
         }
-      }, 50);
+      };
+      requestAnimationFrame(() => {
+        requestAnimationFrame(fitTerminal);
+      });
     }
   }, [isActive, panel.id]);
 
