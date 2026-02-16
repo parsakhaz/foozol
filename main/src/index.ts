@@ -770,41 +770,41 @@ app.on('before-quit', async (event) => {
   event.preventDefault();
   shutdownInProgress = true;
 
-  try {
-    // Check if there are active archive tasks
-    if (archiveProgressManager && archiveProgressManager.hasActiveTasks()) {
-      console.log('[Main] Archive tasks in progress, showing warning dialog...');
-      const activeCount = archiveProgressManager.getActiveTaskCount();
-      const choice = mainWindow
-        ? dialog.showMessageBoxSync(mainWindow, {
-            type: 'warning',
-            title: 'Archive Tasks In Progress',
-            message: `Crystal is removing ${activeCount} worktree${activeCount > 1 ? 's' : ''} in the background.`,
-            detail: 'Git worktree removal can take time, especially for large repositories with many files. If you quit now, the worktree directories may not be fully cleaned up and you may need to remove them manually.\n\nDo you want to quit anyway?',
-            buttons: ['Wait', 'Quit Anyway'],
-            defaultId: 0,
-            cancelId: 0
-          })
-        : dialog.showMessageBoxSync({
-            type: 'warning',
-            title: 'Archive Tasks In Progress',
-            message: `Crystal is removing ${activeCount} worktree${activeCount > 1 ? 's' : ''} in the background.`,
-            detail: 'Git worktree removal can take time, especially for large repositories with many files. If you quit now, the worktree directories may not be fully cleaned up and you may need to remove them manually.\n\nDo you want to quit anyway?',
-            buttons: ['Wait', 'Quit Anyway'],
-            defaultId: 0,
-            cancelId: 0
-          });
+  // Check if there are active archive tasks (before try/finally so "Wait" can cancel quit)
+  if (archiveProgressManager && archiveProgressManager.hasActiveTasks()) {
+    console.log('[Main] Archive tasks in progress, showing warning dialog...');
+    const activeCount = archiveProgressManager.getActiveTaskCount();
+    const choice = mainWindow
+      ? dialog.showMessageBoxSync(mainWindow, {
+          type: 'warning',
+          title: 'Archive Tasks In Progress',
+          message: `Crystal is removing ${activeCount} worktree${activeCount > 1 ? 's' : ''} in the background.`,
+          detail: 'Git worktree removal can take time, especially for large repositories with many files. If you quit now, the worktree directories may not be fully cleaned up and you may need to remove them manually.\n\nDo you want to quit anyway?',
+          buttons: ['Wait', 'Quit Anyway'],
+          defaultId: 0,
+          cancelId: 0
+        })
+      : dialog.showMessageBoxSync({
+          type: 'warning',
+          title: 'Archive Tasks In Progress',
+          message: `Crystal is removing ${activeCount} worktree${activeCount > 1 ? 's' : ''} in the background.`,
+          detail: 'Git worktree removal can take time, especially for large repositories with many files. If you quit now, the worktree directories may not be fully cleaned up and you may need to remove them manually.\n\nDo you want to quit anyway?',
+          buttons: ['Wait', 'Quit Anyway'],
+          defaultId: 0,
+          cancelId: 0
+        });
 
-      if (choice === 0) {
-        // User chose to wait - reset guard and cancel quit
-        shutdownInProgress = false;
-        return;
-      }
-
-      // User chose to quit anyway
-      archiveProgressManager.clearAll();
+    if (choice === 0) {
+      // User chose to wait - reset guard and cancel quit
+      shutdownInProgress = false;
+      return;
     }
 
+    // User chose to quit anyway
+    archiveProgressManager.clearAll();
+  }
+
+  try {
     // Phase 1: Send Ctrl+C to all terminals to gracefully exit Claude instances
     // Claude needs to exit cleanly so it releases the session ID lock, allowing
     // us to resume with --resume <panelId> on next launch.
@@ -861,12 +861,14 @@ app.on('before-quit', async (event) => {
           for (const panel of panels) {
             if (panel.type === 'claude' || panel.type === 'codex') {
               const agentSessionId = sessionManager?.getPanelAgentSessionId(panel.id);
-              if (agentSessionId) {
-                // Update panel status to interrupted
+              const customState = (panel.state?.customState || {}) as BaseAIPanelState;
+              const isActive = customState.panelStatus === 'running' || customState.panelStatus === 'waiting';
+              if (agentSessionId && isActive) {
+                // Update panel status to interrupted (only if it was actively running)
                 const state = panel.state;
-                const customState = (state.customState || {}) as BaseAIPanelState;
-                customState.panelStatus = 'interrupted';
-                state.customState = customState;
+                const cs = (state.customState || {}) as BaseAIPanelState;
+                cs.panelStatus = 'interrupted';
+                state.customState = cs;
 
                 await panelManager.updatePanel(panel.id, { state });
 
