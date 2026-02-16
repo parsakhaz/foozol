@@ -210,9 +210,13 @@ export class TaskQueue {
           await this.ensureUniqueNames(sessionName, worktreeName, targetProject, index);
         sessionName = uniqueSessionName;
         worktreeName = uniqueWorktreeName;
-        
 
-        const { worktreePath, baseCommit, baseBranch: actualBaseBranch } = await worktreeManager.createWorktree(targetProject.path, worktreeName, undefined, baseBranch, targetProject.worktree_folder || undefined);
+
+        const { getWSLContextFromProject } = require('../utils/wslUtils');
+        const wslContext = getWSLContextFromProject(targetProject);
+        const { worktreePath, baseCommit, baseBranch: actualBaseBranch } = await worktreeManager.createWorktree(
+          targetProject.path, worktreeName, undefined, baseBranch, targetProject.worktree_folder || undefined, wslContext
+        );
 
         const session = await sessionManager.createSession(
           sessionName,

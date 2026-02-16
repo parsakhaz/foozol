@@ -8,14 +8,16 @@ export interface Project {
   active: boolean;
   created_at: string;
   updated_at: string;
-  default_permission_mode?: 'approve' | 'ignore';
+  default_permission_mode?: "approve" | "ignore";
   open_ide_command?: string | null;
   display_order?: number;
   worktree_folder?: string | null;
   lastUsedModel?: string;
-  commit_mode?: 'structured' | 'checkpoint' | 'disabled';
+  commit_mode?: "structured" | "checkpoint" | "disabled";
   commit_structured_prompt_template?: string;
   commit_checkpoint_prefix?: string;
+  wsl_enabled?: boolean;
+  wsl_distribution?: string | null;
 }
 
 export interface ProjectRunCommand {
@@ -43,7 +45,7 @@ export interface Session {
   initial_prompt: string;
   worktree_name: string;
   worktree_path: string;
-  status: 'pending' | 'running' | 'stopped' | 'completed' | 'failed';
+  status: "pending" | "running" | "stopped" | "completed" | "failed";
   status_message?: string;
   created_at: string;
   updated_at: string;
@@ -55,16 +57,16 @@ export interface Session {
   project_id?: number;
   folder_id?: string;
   claude_session_id?: string;
-  permission_mode?: 'approve' | 'ignore';
+  permission_mode?: "approve" | "ignore";
   run_started_at?: string;
   is_main_repo?: boolean;
   display_order?: number;
   is_favorite?: boolean;
   auto_commit?: boolean;
-  tool_type?: 'claude' | 'codex' | 'none';
+  tool_type?: "claude" | "codex" | "none";
   base_commit?: string;
   base_branch?: string;
-  commit_mode?: 'structured' | 'checkpoint' | 'disabled';
+  commit_mode?: "structured" | "checkpoint" | "disabled";
   commit_mode_settings?: string; // JSON string of CommitModeSettings
   skip_continue_next?: boolean;
 }
@@ -72,7 +74,7 @@ export interface Session {
 export interface SessionOutput {
   id: number;
   session_id: string;
-  type: 'stdout' | 'stderr' | 'system' | 'json' | 'error';
+  type: "stdout" | "stderr" | "system" | "json" | "error";
   data: string;
   timestamp: string;
   panel_id?: string;
@@ -81,7 +83,7 @@ export interface SessionOutput {
 export interface ConversationMessage {
   id: number;
   session_id: string;
-  message_type: 'user' | 'assistant';
+  message_type: "user" | "assistant";
   content: string;
   timestamp: string;
 }
@@ -94,20 +96,20 @@ export interface CreateSessionData {
   worktree_path: string;
   project_id: number;
   folder_id?: string;
-  permission_mode?: 'approve' | 'ignore';
+  permission_mode?: "approve" | "ignore";
   is_main_repo?: boolean;
   display_order?: number;
   auto_commit?: boolean;
-  tool_type?: 'claude' | 'codex' | 'none';
+  tool_type?: "claude" | "codex" | "none";
   base_commit?: string;
   base_branch?: string;
-  commit_mode?: 'structured' | 'checkpoint' | 'disabled';
+  commit_mode?: "structured" | "checkpoint" | "disabled";
   commit_mode_settings?: string; // JSON string of CommitModeSettings
 }
 
 export interface UpdateSessionData {
   name?: string;
-  status?: Session['status'];
+  status?: Session["status"];
   status_message?: string;
   last_output?: string;
   exit_code?: number;
@@ -117,7 +119,7 @@ export interface UpdateSessionData {
   run_started_at?: string;
   is_favorite?: boolean;
   auto_commit?: boolean;
-  commit_mode?: 'structured' | 'checkpoint' | 'disabled';
+  commit_mode?: "structured" | "checkpoint" | "disabled";
   commit_mode_settings?: string; // JSON string of CommitModeSettings
   skip_continue_next?: boolean;
 }
@@ -147,7 +149,7 @@ export interface ExecutionDiff {
   commit_message?: string;
   timestamp: string;
   comparison_branch?: string;
-  history_source?: 'remote' | 'local' | 'branch';
+  history_source?: "remote" | "local" | "branch";
   history_limit_reached?: boolean;
 }
 

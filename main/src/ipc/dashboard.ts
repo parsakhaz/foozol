@@ -4,6 +4,7 @@ import { formatForDatabase } from '../utils/timestampUtils';
 import type { AppServices } from './types';
 import path from 'path';
 import fs from 'fs';
+import { getWSLContextFromProject, linuxToUNCPath, WSLContext } from '../utils/wslUtils';
 
 interface MainBranchStatus {
   status: 'up-to-date' | 'behind' | 'ahead' | 'diverged';
@@ -69,15 +70,18 @@ export function registerDashboardHandlers(ipcMain: IpcMain, services: AppService
         };
       }
 
+      const wslContext = getWSLContextFromProject(project);
+
       // Ensure the project path exists and is a git repository
-      if (!fs.existsSync(project.path)) {
+      const fsPath = wslContext ? linuxToUNCPath(project.path, wslContext.distribution) : project.path;
+      if (!fs.existsSync(fsPath)) {
         return {
           success: false,
           error: 'Project path does not exist'
         };
       }
 
-      const gitDir = path.join(project.path, '.git');
+      const gitDir = wslContext ? linuxToUNCPath(project.path + '/.git', wslContext.distribution) : path.join(project.path, '.git');
       if (!fs.existsSync(gitDir)) {
         return {
           success: false,
@@ -86,7 +90,7 @@ export function registerDashboardHandlers(ipcMain: IpcMain, services: AppService
       }
 
       // Get the main branch name dynamically
-      const mainBranch = await worktreeManager.getProjectMainBranch(project.path);
+      const mainBranch = await worktreeManager.getProjectMainBranch(project.path, wslContext);
 
       // Send initial data immediately
       const initialData: Partial<ProjectDashboardData> = {
@@ -102,12 +106,12 @@ export function registerDashboardHandlers(ipcMain: IpcMain, services: AppService
       event.sender.send('dashboard:update', { projectId, data: initialData, isPartial: true });
 
       // Start async operations in parallel
-      const fetchPromise = execAsync('git fetch origin', { cwd: project.path, timeout: 15000 }).catch(error => {
+      const fetchPromise = execAsync('git fetch origin', { cwd: project.path, timeout: 15000 }, wslContext).catch(error => {
         console.warn('Failed to fetch from origin:', error);
       });
 
-      const mainBranchPromise = getMainBranchStatusAsync(project.path, mainBranch);
-      const remotesPromise = getRemoteStatuses(project.path, mainBranch);
+      const mainBranchPromise = getMainBranchStatusAsync(project.path, mainBranch, wslContext);
+      const remotesPromise = getRemoteStatuses(project.path, mainBranch, wslContext);
 
       // Get all sessions for this project
       const sessions = databaseService.getAllSessions(projectId);
@@ -119,7 +123,8 @@ export function registerDashboardHandlers(ipcMain: IpcMain, services: AppService
           const branchInfo = await getSessionBranchInfoAsync(
             session,
             project.path,
-            mainBranch
+            mainBranch,
+            wslContext
           );
           if (branchInfo) {
             // Send individual session update
@@ -191,15 +196,18 @@ export function registerDashboardHandlers(ipcMain: IpcMain, services: AppService
         };
       }
 
+      const wslContext = getWSLContextFromProject(project);
+
       // Ensure the project path exists and is a git repository
-      if (!fs.existsSync(project.path)) {
+      const fsPath = wslContext ? linuxToUNCPath(project.path, wslContext.distribution) : project.path;
+      if (!fs.existsSync(fsPath)) {
         return {
           success: false,
           error: 'Project path does not exist'
         };
       }
 
-      const gitDir = path.join(project.path, '.git');
+      const gitDir = wslContext ? linuxToUNCPath(project.path + '/.git', wslContext.distribution) : path.join(project.path, '.git');
       if (!fs.existsSync(gitDir)) {
         return {
           success: false,
@@ -209,20 +217,20 @@ export function registerDashboardHandlers(ipcMain: IpcMain, services: AppService
 
       // Fetch latest changes from remote (async to prevent blocking)
       try {
-        await execAsync('git fetch origin', { cwd: project.path, timeout: 15000 });
+        await execAsync('git fetch origin', { cwd: project.path, timeout: 15000 }, wslContext);
       } catch (error) {
         console.warn('Failed to fetch from origin:', error);
         // Continue anyway - we can still show local status
       }
 
       // Get the main branch name dynamically
-      const mainBranch = await worktreeManager.getProjectMainBranch(project.path);
+      const mainBranch = await worktreeManager.getProjectMainBranch(project.path, wslContext);
 
       // Get main branch status (async)
-      const mainBranchStatus = await getMainBranchStatusAsync(project.path, mainBranch);
-      
+      const mainBranchStatus = await getMainBranchStatusAsync(project.path, mainBranch, wslContext);
+
       // Get remote statuses (async)
-      const remotes = await getRemoteStatuses(project.path, mainBranch);
+      const remotes = await getRemoteStatuses(project.path, mainBranch, wslContext);
 
       // Get all sessions for this project
       const sessions = databaseService.getAllSessions(projectId);
@@ -239,7 +247,8 @@ export function registerDashboardHandlers(ipcMain: IpcMain, services: AppService
               return await getSessionBranchInfoAsync(
                 session,
                 project.path,
-                mainBranch
+                mainBranch,
+                wslContext
               );
             } catch (error) {
               console.error(`Failed to get branch info for session ${session.id}:`, error);
@@ -326,10 +335,10 @@ function getMainBranchStatus(projectPath: string, mainBranch: string): MainBranc
   }
 }
 
-async function getRemoteStatuses(projectPath: string, mainBranch: string): Promise<RemoteStatus[]> {
+async function getRemoteStatuses(projectPath: string, mainBranch: string, wslContext?: WSLContext | null): Promise<RemoteStatus[]> {
   try {
     // Get all remotes
-    const remotesResult = await execAsync('git remote -v', { cwd: projectPath, timeout: 5000 });
+    const remotesResult = await execAsync('git remote -v', { cwd: projectPath, timeout: 5000 }, wslContext);
     const remoteLines = remotesResult.stdout.trim().split('\n');
     
     // Parse unique remotes
@@ -346,19 +355,20 @@ async function getRemoteStatuses(projectPath: string, mainBranch: string): Promi
     // Fetch from all remotes
     for (const [remoteName, remoteUrl] of remotesMap) {
       try {
-        await execAsync(`git fetch ${remoteName}`, { cwd: projectPath, timeout: 10000 });
+        await execAsync(`git fetch ${remoteName}`, { cwd: projectPath, timeout: 10000 }, wslContext);
       } catch (error) {
         console.warn(`Failed to fetch from ${remoteName}:`, error);
       }
-      
+
       // Check if remote branch exists
       try {
-        await execAsync(`git rev-parse --verify ${remoteName}/${mainBranch}`, { cwd: projectPath, timeout: 2000 });
-        
+        await execAsync(`git rev-parse --verify ${remoteName}/${mainBranch}`, { cwd: projectPath, timeout: 2000 }, wslContext);
+
         // Get ahead/behind status
         const result = await execAsync(
           `git rev-list --left-right --count ${mainBranch}...${remoteName}/${mainBranch}`,
-          { cwd: projectPath, timeout: 5000 }
+          { cwd: projectPath, timeout: 5000 },
+          wslContext
         );
         const [ahead, behind] = result.stdout.trim().split('\t').map(n => parseInt(n, 10));
         
@@ -409,14 +419,14 @@ async function getRemoteStatuses(projectPath: string, mainBranch: string): Promi
   }
 }
 
-async function getMainBranchStatusAsync(projectPath: string, mainBranch: string): Promise<MainBranchStatus> {
+async function getMainBranchStatusAsync(projectPath: string, mainBranch: string, wslContext?: WSLContext | null): Promise<MainBranchStatus> {
   try {
     // Check if we have a remote tracking branch
     const remoteBranch = `origin/${mainBranch}`;
-    
+
     // Check if remote branch exists
     try {
-      await execAsync(`git rev-parse --verify ${remoteBranch}`, { cwd: projectPath, timeout: 5000 });
+      await execAsync(`git rev-parse --verify ${remoteBranch}`, { cwd: projectPath, timeout: 5000 }, wslContext);
     } catch {
       // No remote branch
       return {
@@ -428,7 +438,8 @@ async function getMainBranchStatusAsync(projectPath: string, mainBranch: string)
     // Get commit counts
     const result = await execAsync(
       `git rev-list --left-right --count ${mainBranch}...${remoteBranch}`,
-      { cwd: projectPath, timeout: 5000 }
+      { cwd: projectPath, timeout: 5000 },
+      wslContext
     );
     const aheadBehind = result.stdout.trim();
 
@@ -590,19 +601,21 @@ async function getSessionBranchInfo(
 async function getSessionBranchInfoAsync(
   session: { id: string; name: string; worktree_path: string; base_commit?: string; base_branch?: string },
   projectPath: string,
-  mainBranch: string
+  mainBranch: string,
+  wslContext?: WSLContext | null
 ): Promise<SessionBranchInfo | null> {
   try {
     // Check if worktree still exists
-    if (!fs.existsSync(session.worktree_path)) {
+    const worktreeFsPath = wslContext ? linuxToUNCPath(session.worktree_path, wslContext.distribution) : session.worktree_path;
+    if (!fs.existsSync(worktreeFsPath)) {
       return null;
     }
 
     // Get the branch name from the worktree
-    const branchResult = await execAsync('git branch --show-current', { 
+    const branchResult = await execAsync('git branch --show-current', {
       cwd: session.worktree_path,
       timeout: 5000
-    });
+    }, wslContext);
     const branchName = branchResult.stdout.trim();
 
     if (!branchName) {
@@ -619,7 +632,8 @@ async function getSessionBranchInfoAsync(
       try {
         const mergeBaseResult = await execAsync(
           `git merge-base ${branchName} ${mainBranch}`,
-          { cwd: session.worktree_path, timeout: 5000 }
+          { cwd: session.worktree_path, timeout: 5000 },
+          wslContext
         );
         baseCommit = mergeBaseResult.stdout.trim();
       } catch {
@@ -630,22 +644,24 @@ async function getSessionBranchInfoAsync(
     // Check if base branch has moved (session is stale)
     let isStale = false;
     let staleSince: string | undefined;
-    
+
     if (baseCommit && baseCommit !== 'unknown') {
       try {
         const currentBaseResult = await execAsync(
           `git rev-parse ${baseBranch}`,
-          { cwd: projectPath, timeout: 5000 }
+          { cwd: projectPath, timeout: 5000 },
+          wslContext
         );
         const currentBaseCommit = currentBaseResult.stdout.trim();
-        
+
         isStale = currentBaseCommit !== baseCommit;
-        
+
         if (isStale) {
           // Try to get the timestamp when the base branch moved
           const commitDateResult = await execAsync(
             `git log -1 --format=%cd --date=iso-strict ${currentBaseCommit}`,
-            { cwd: projectPath, timeout: 5000 }
+            { cwd: projectPath, timeout: 5000 },
+            wslContext
           );
           staleSince = commitDateResult.stdout.trim();
         }
@@ -655,19 +671,20 @@ async function getSessionBranchInfoAsync(
     }
 
     // Check for uncommitted changes (async)
-    const hasUncommittedChanges = await checkUncommittedChangesAsync(session.worktree_path);
+    const hasUncommittedChanges = await checkUncommittedChangesAsync(session.worktree_path, wslContext);
 
     // Get commits ahead/behind
     let commitsAhead = 0;
     let commitsBehind = 0;
-    
+
     try {
       const aheadBehindResult = await execAsync(
         `git rev-list --left-right --count ${branchName}...${baseBranch}`,
-        { cwd: session.worktree_path, timeout: 5000 }
+        { cwd: session.worktree_path, timeout: 5000 },
+        wslContext
       );
       const aheadBehind = aheadBehindResult.stdout.trim();
-      
+
       const [ahead, behind] = aheadBehind.split('\t').map((n: string) => parseInt(n, 10));
       commitsAhead = ahead;
       commitsBehind = behind;
@@ -680,7 +697,8 @@ async function getSessionBranchInfoAsync(
     try {
       const prResult = await execAsync(
         `gh pr list --head ${branchName} --json number,title,state,url --limit 1`,
-        { cwd: projectPath, timeout: 10000 }
+        { cwd: projectPath, timeout: 10000 },
+        wslContext
       );
       const prOutput = prResult.stdout.trim();
       
@@ -729,12 +747,12 @@ function checkUncommittedChanges(worktreePath: string): boolean {
   }
 }
 
-async function checkUncommittedChangesAsync(worktreePath: string): Promise<boolean> {
+async function checkUncommittedChangesAsync(worktreePath: string, wslContext?: WSLContext | null): Promise<boolean> {
   try {
-    const result = await execAsync('git status --porcelain', { 
-      cwd: worktreePath, 
-      timeout: 5000 
-    });
+    const result = await execAsync('git status --porcelain', {
+      cwd: worktreePath,
+      timeout: 5000
+    }, wslContext);
     return result.stdout.trim().length > 0;
   } catch {
     return false;

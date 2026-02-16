@@ -9,6 +9,8 @@ import { PanelEventType, ToolPanelType, PanelEvent } from '../../../shared/types
 import type { Session } from '../types/session';
 import type { GitCommit } from '../services/gitDiffManager';
 import type { ExecException } from 'child_process';
+import { getWSLContextFromProject, wrapCommandForWSL } from '../utils/wslUtils';
+import type { WSLContext } from '../utils/wslUtils';
 
 // Extended type for git system virtual panels
 type SystemPanelType = ToolPanelType | 'git';
@@ -53,6 +55,22 @@ interface RawCommitData {
 
 export function registerGitHandlers(ipcMain: IpcMain, services: AppServices): void {
   const { sessionManager, gitDiffManager, worktreeManager, claudeCodeManager, gitStatusManager, databaseService } = services;
+
+  // Helper to get WSL context from a session
+  const getWSLContextForSession = (sessionId: string): WSLContext | null => {
+    const project = sessionManager.getProjectForSession(sessionId);
+    if (!project) return null;
+    return getWSLContextFromProject(project);
+  };
+
+  // Helper for git commands with WSL support
+  const gitExecSync = (command: string, worktreePath: string, wslCtx: WSLContext | null, options?: Record<string, unknown>): string => {
+    if (wslCtx) {
+      const wrappedCmd = wrapCommandForWSL(command, wslCtx.distribution, worktreePath);
+      return execSync(wrappedCmd, { ...options, encoding: 'utf-8' }) as string;
+    }
+    return execSync(command, { ...options, cwd: worktreePath, encoding: 'utf-8' }) as string;
+  };
 
   // Helper function to emit git operation events to all sessions in a project
   const emitGitOperationToProject = (sessionId: string, eventType: PanelEventType, message: string, details?: Record<string, unknown>) => {
@@ -298,26 +316,23 @@ export function registerGitHandlers(ipcMain: IpcMain, services: AppServices): vo
         return { success: false, error: 'Session or worktree path not found' };
       }
 
+      const wslContext = getWSLContextForSession(sessionId);
+
       // Check if there are any changes to commit
-      const status = execSync('git status --porcelain', { 
-        cwd: session.worktreePath,
-        encoding: 'utf-8'
-      }).trim();
+      const status = gitExecSync('git status --porcelain', session.worktreePath, wslContext).trim();
 
       if (!status) {
         return { success: false, error: 'No changes to commit' };
       }
 
       // Stage all changes
-      execSync('git add -A', { cwd: session.worktreePath });
+      gitExecSync('git add -A', session.worktreePath, wslContext);
 
       // Create the commit with Crystal's signature using safe escaping
       const commitCommand = buildGitCommitCommand(message);
 
       try {
-        execSync(commitCommand, { 
-          cwd: session.worktreePath
-        });
+        gitExecSync(commitCommand, session.worktreePath, wslContext);
         
         // Refresh git status for this session after commit
         await refreshGitStatusForSession(sessionId);
@@ -371,12 +386,10 @@ export function registerGitHandlers(ipcMain: IpcMain, services: AppServices): vo
 
       // Handle uncommitted changes request
       if (executionIds && executionIds.length === 1 && executionIds[0] === 0) {
+        const wslContext = getWSLContextForSession(sessionId);
         // Verify the worktree exists and has uncommitted changes
         try {
-          const status = execSync('git status --porcelain', { 
-            cwd: session.worktreePath, 
-            encoding: 'utf8' 
-          });
+          const status = gitExecSync('git status --porcelain', session.worktreePath, wslContext);
         } catch (error) {
           console.error('Error checking git status:', error);
         }
@@ -404,6 +417,7 @@ export function registerGitHandlers(ipcMain: IpcMain, services: AppServices): vo
 
         // Handle range that includes uncommitted changes
         if (sortedIds[0] === 0 || sortedIds[1] === 0) {
+          const wslContext = getWSLContextForSession(sessionId);
           // If uncommitted is in the range, get diff from the other commit to working directory
           const commitId = sortedIds[0] === 0 ? sortedIds[1] : sortedIds[0];
           const commitIndex = commitId - 1;
@@ -411,18 +425,21 @@ export function registerGitHandlers(ipcMain: IpcMain, services: AppServices): vo
           if (commitIndex >= 0 && commitIndex < commits.length) {
             const fromCommit = commits[commitIndex];
             // Get diff from commit to working directory (includes uncommitted changes)
-            const diff = execSync(
+            const diff = gitExecSync(
               `git diff ${fromCommit.hash}`,
-              { cwd: session.worktreePath, encoding: 'utf8', maxBuffer: 10 * 1024 * 1024 }
+              session.worktreePath,
+              wslContext,
+              { maxBuffer: 10 * 1024 * 1024 }
             );
 
             const stats = gitDiffManager.parseDiffStats(
-              execSync(`git diff --stat ${fromCommit.hash}`, { cwd: session.worktreePath, encoding: 'utf8' })
+              gitExecSync(`git diff --stat ${fromCommit.hash}`, session.worktreePath, wslContext)
             );
 
-            const changedFiles = execSync(
+            const changedFiles = gitExecSync(
               `git diff --name-only ${fromCommit.hash}`,
-              { cwd: session.worktreePath, encoding: 'utf8' }
+              session.worktreePath,
+              wslContext
             ).trim().split('\n').filter(Boolean);
 
             return {
@@ -454,11 +471,9 @@ export function registerGitHandlers(ipcMain: IpcMain, services: AppServices): vo
           let fromCommitHash: string;
 
           try {
+            const wslContext = getWSLContextForSession(sessionId);
             // Try to get the parent of the older commit
-            const parentHash = execSync(`git rev-parse ${olderCommit.hash}^`, {
-              cwd: session.worktreePath,
-              encoding: 'utf8'
-            }).trim();
+            const parentHash = gitExecSync(`git rev-parse ${olderCommit.hash}^`, session.worktreePath, wslContext).trim();
             fromCommitHash = parentHash;
           } catch (error) {
             // If there's no parent (initial commit), use git's empty tree hash
@@ -485,31 +500,32 @@ export function registerGitHandlers(ipcMain: IpcMain, services: AppServices): vo
 
         // For a single commit, show changes from before the commit to working directory
         if (commits.length === 1) {
+          const wslContext = getWSLContextForSession(sessionId);
           let fromCommitHash: string;
           try {
             // Try to get the parent of the commit
-            fromCommitHash = execSync(`git rev-parse ${commits[0].hash}^`, {
-              cwd: session.worktreePath,
-              encoding: 'utf8'
-            }).trim();
+            fromCommitHash = gitExecSync(`git rev-parse ${commits[0].hash}^`, session.worktreePath, wslContext).trim();
           } catch (error) {
             // If there's no parent (initial commit), use git's empty tree hash
             fromCommitHash = '4b825dc642cb6eb9a060e54bf8d69288fbee4904';
           }
 
           // Get diff from parent to working directory (includes the commit and any uncommitted changes)
-          const diff = execSync(
+          const diff = gitExecSync(
             `git diff ${fromCommitHash}`,
-            { cwd: session.worktreePath, encoding: 'utf8', maxBuffer: 10 * 1024 * 1024 }
+            session.worktreePath,
+            wslContext,
+            { maxBuffer: 10 * 1024 * 1024 }
           );
-          
+
           const stats = gitDiffManager.parseDiffStats(
-            execSync(`git diff --stat ${fromCommitHash}`, { cwd: session.worktreePath, encoding: 'utf8' })
+            gitExecSync(`git diff --stat ${fromCommitHash}`, session.worktreePath, wslContext)
           );
-          
-          const changedFiles = execSync(
+
+          const changedFiles = gitExecSync(
             `git diff --name-only ${fromCommitHash}`,
-            { cwd: session.worktreePath, encoding: 'utf8' }
+            session.worktreePath,
+            wslContext
           ).trim().split('\n').filter(f => f);
 
           return { 
@@ -524,32 +540,33 @@ export function registerGitHandlers(ipcMain: IpcMain, services: AppServices): vo
 
         // For multiple commits, get diff from parent of first commit to working directory (all changes including uncommitted)
         const firstCommit = commits[commits.length - 1]; // Oldest commit
+        const wslContext = getWSLContextForSession(sessionId);
         let fromCommitHash: string;
 
         try {
           // Try to get the parent of the first commit
-          fromCommitHash = execSync(`git rev-parse ${firstCommit.hash}^`, {
-            cwd: session.worktreePath,
-            encoding: 'utf8'
-          }).trim();
+          fromCommitHash = gitExecSync(`git rev-parse ${firstCommit.hash}^`, session.worktreePath, wslContext).trim();
         } catch (error) {
           // If there's no parent (initial commit), use git's empty tree hash
           fromCommitHash = '4b825dc642cb6eb9a060e54bf8d69288fbee4904';
         }
 
         // Get diff from the parent of first commit to working directory (includes uncommitted changes)
-        const diff = execSync(
+        const diff = gitExecSync(
           `git diff ${fromCommitHash}`,
-          { cwd: session.worktreePath, encoding: 'utf8', maxBuffer: 10 * 1024 * 1024 }
+          session.worktreePath,
+          wslContext,
+          { maxBuffer: 10 * 1024 * 1024 }
         );
-        
+
         const stats = gitDiffManager.parseDiffStats(
-          execSync(`git diff --stat ${fromCommitHash}`, { cwd: session.worktreePath, encoding: 'utf8' })
+          gitExecSync(`git diff --stat ${fromCommitHash}`, session.worktreePath, wslContext)
         );
-        
-        const changedFiles = execSync(
+
+        const changedFiles = gitExecSync(
           `git diff --name-only ${fromCommitHash}`,
-          { cwd: session.worktreePath, encoding: 'utf8' }
+          session.worktreePath,
+          wslContext
         ).trim().split('\n').filter(f => f);
 
         return { 
@@ -628,11 +645,12 @@ export function registerGitHandlers(ipcMain: IpcMain, services: AppServices): vo
         return { success: false, error: 'Project not found for session' };
       }
 
+      const wslContext = getWSLContextForSession(sessionId);
       // Always get the current branch from the project directory
-      const mainBranch = await worktreeManager.getProjectMainBranch(project.path);
-      
+      const mainBranch = await worktreeManager.getProjectMainBranch(project.path, wslContext);
+
       // Check for conflicts
-      const conflictInfo = await worktreeManager.checkForRebaseConflicts(session.worktreePath, mainBranch);
+      const conflictInfo = await worktreeManager.checkForRebaseConflicts(session.worktreePath, mainBranch, wslContext);
       
       return { 
         success: true, 
@@ -664,14 +682,15 @@ export function registerGitHandlers(ipcMain: IpcMain, services: AppServices): vo
         return { success: false, error: 'Project not found for session' };
       }
 
+      const wslContext = getWSLContextForSession(sessionId);
       // Get the main branch from the project directory's current branch
       const mainBranch = await Promise.race([
-        worktreeManager.getProjectMainBranch(project.path),
+        worktreeManager.getProjectMainBranch(project.path, wslContext),
         new Promise((_, reject) => setTimeout(() => reject(new Error('getProjectMainBranch timeout')), 30000))
       ]) as string;
 
       // Check for conflicts before attempting rebase
-      const conflictCheck = await worktreeManager.checkForRebaseConflicts(session.worktreePath, mainBranch);
+      const conflictCheck = await worktreeManager.checkForRebaseConflicts(session.worktreePath, mainBranch, wslContext);
       
       if (conflictCheck.hasConflicts) {
         
@@ -741,7 +760,7 @@ export function registerGitHandlers(ipcMain: IpcMain, services: AppServices): vo
       });
 
       await Promise.race([
-        worktreeManager.rebaseMainIntoWorktree(session.worktreePath, mainBranch),
+        worktreeManager.rebaseMainIntoWorktree(session.worktreePath, mainBranch, wslContext),
         new Promise((_, reject) => setTimeout(() => reject(new Error('rebaseMainIntoWorktree timeout')), 120000))
       ]);
 
@@ -808,15 +827,16 @@ export function registerGitHandlers(ipcMain: IpcMain, services: AppServices): vo
         return { success: false, error: 'Project not found for session' };
       }
 
+      const wslContext = getWSLContextForSession(sessionId);
       // Get the main branch from the project directory's current branch
-      const mainBranch = await worktreeManager.getProjectMainBranch(project.path);
+      const mainBranch = await worktreeManager.getProjectMainBranch(project.path, wslContext);
 
       // Check if we're actually in a rebase state (could have been pre-detected conflicts)
       // Try to abort any existing rebase, but don't fail if there isn't one
       try {
-        const statusOutput = execSync('git status --porcelain=v1', { cwd: session.worktreePath }).toString();
+        const statusOutput = gitExecSync('git status --porcelain=v1', session.worktreePath, wslContext);
         if (statusOutput.includes('rebase')) {
-          await worktreeManager.abortRebase(session.worktreePath);
+          await worktreeManager.abortRebase(session.worktreePath, wslContext);
           
           // Emit git operation event about aborting the rebase
           const abortMessage = `🔄 GIT OPERATION\nAborted rebase successfully`;
@@ -916,9 +936,10 @@ export function registerGitHandlers(ipcMain: IpcMain, services: AppServices): vo
         return { success: false, error: 'Project not found for session' };
       }
 
+      const wslContext = getWSLContextForSession(sessionId);
       // Get the effective main branch (override or auto-detected)
       const mainBranch = await Promise.race([
-        worktreeManager.getProjectMainBranch(project.path),
+        worktreeManager.getProjectMainBranch(project.path, wslContext),
         new Promise((_, reject) => setTimeout(() => reject(new Error('getProjectMainBranch timeout')), 30000))
       ]) as string;
 
@@ -931,7 +952,7 @@ export function registerGitHandlers(ipcMain: IpcMain, services: AppServices): vo
       });
 
       await Promise.race([
-        worktreeManager.squashAndMergeWorktreeToMain(project.path, session.worktreePath, mainBranch, commitMessage),
+        worktreeManager.squashAndMergeWorktreeToMain(project.path, session.worktreePath, mainBranch, commitMessage, wslContext),
         new Promise((_, reject) => setTimeout(() => reject(new Error('squashAndMergeWorktreeToMain timeout')), 180000))
       ]);
 
@@ -1005,8 +1026,9 @@ export function registerGitHandlers(ipcMain: IpcMain, services: AppServices): vo
         return { success: false, error: 'Project not found for session' };
       }
 
+      const wslContext = getWSLContextForSession(sessionId);
       // Get the effective main branch (override or auto-detected)
-      const mainBranch = await worktreeManager.getProjectMainBranch(project.path);
+      const mainBranch = await worktreeManager.getProjectMainBranch(project.path, wslContext);
 
       // Emit git operation started event to all sessions in project
       const startMessage = `🔄 GIT OPERATION\nMerging to ${mainBranch} (preserving all commits)...`;
@@ -1015,7 +1037,7 @@ export function registerGitHandlers(ipcMain: IpcMain, services: AppServices): vo
         mainBranch
       });
 
-      await worktreeManager.mergeWorktreeToMain(project.path, session.worktreePath, mainBranch);
+      await worktreeManager.mergeWorktreeToMain(project.path, session.worktreePath, mainBranch, wslContext);
 
       // Emit git operation completed event to all sessions in project
       const successMessage = `✓ Successfully merged worktree to ${mainBranch}`;
@@ -1087,8 +1109,9 @@ export function registerGitHandlers(ipcMain: IpcMain, services: AppServices): vo
         operation: 'pull'
       });
 
+      const wslContext = getWSLContextForSession(sessionId);
       // Run git pull
-      const result = await worktreeManager.gitPull(session.worktreePath);
+      const result = await worktreeManager.gitPull(session.worktreePath, wslContext);
 
       // Emit git operation completed event to all sessions in project
       const successMessage = `✓ Successfully pulled latest changes` +
@@ -1163,8 +1186,9 @@ export function registerGitHandlers(ipcMain: IpcMain, services: AppServices): vo
         operation: 'push'
       });
 
+      const wslContext = getWSLContextForSession(sessionId);
       // Run git push
-      const result = await worktreeManager.gitPush(session.worktreePath);
+      const result = await worktreeManager.gitPush(session.worktreePath, wslContext);
 
       // Emit git operation completed event to all sessions in project
       const successMessage = `✓ Successfully pushed changes to remote` +
@@ -1231,8 +1255,9 @@ export function registerGitHandlers(ipcMain: IpcMain, services: AppServices): vo
         operation: 'fetch'
       });
 
+      const wslContext = getWSLContextForSession(sessionId);
       // Run git fetch
-      const result = await worktreeManager.gitFetch(session.worktreePath);
+      const result = await worktreeManager.gitFetch(session.worktreePath, wslContext);
 
       // Emit git operation completed event
       const successMessage = `✓ Successfully fetched from remote` +
@@ -1288,8 +1313,9 @@ export function registerGitHandlers(ipcMain: IpcMain, services: AppServices): vo
         operation: 'stash'
       });
 
+      const wslContext = getWSLContextForSession(sessionId);
       // Run git stash
-      const result = await worktreeManager.gitStash(session.worktreePath, message);
+      const result = await worktreeManager.gitStash(session.worktreePath, message, wslContext);
 
       // Emit git operation completed event
       const successMessage = `✓ Successfully stashed changes` +
@@ -1345,8 +1371,9 @@ export function registerGitHandlers(ipcMain: IpcMain, services: AppServices): vo
         operation: 'stash_pop'
       });
 
+      const wslContext = getWSLContextForSession(sessionId);
       // Run git stash pop
-      const result = await worktreeManager.gitStashPop(session.worktreePath);
+      const result = await worktreeManager.gitStashPop(session.worktreePath, wslContext);
 
       // Emit git operation completed event
       const successMessage = `✓ Successfully applied stash` +
@@ -1396,7 +1423,8 @@ export function registerGitHandlers(ipcMain: IpcMain, services: AppServices): vo
         return { success: false, error: 'Session has no worktree path' };
       }
 
-      const hasStash = await worktreeManager.hasStash(session.worktreePath);
+      const wslContext = getWSLContextForSession(sessionId);
+      const hasStash = await worktreeManager.hasStash(session.worktreePath, wslContext);
       return { success: true, data: hasStash };
     } catch (error: unknown) {
       console.error('Failed to check stash:', error);
@@ -1425,8 +1453,9 @@ export function registerGitHandlers(ipcMain: IpcMain, services: AppServices): vo
         message: message.split('\n')[0]
       });
 
+      const wslContext = getWSLContextForSession(sessionId);
       // Run git add -A && git commit
-      const result = await worktreeManager.gitStageAllAndCommit(session.worktreePath, message);
+      const result = await worktreeManager.gitStageAllAndCommit(session.worktreePath, message, wslContext);
 
       // Emit git operation completed event
       const successMessage = `✓ Successfully committed changes` +
@@ -1476,8 +1505,9 @@ export function registerGitHandlers(ipcMain: IpcMain, services: AppServices): vo
         return { success: false, error: 'Session has no worktree path' };
       }
 
+      const wslContext = getWSLContextForSession(sessionId);
       // Get the last N commits from the repository
-      const commits = await worktreeManager.getLastCommits(session.worktreePath, count);
+      const commits = await worktreeManager.getLastCommits(session.worktreePath, count, wslContext);
       const limitReached = commits.length === count;
 
       // Transform commits to match ExecutionDiff format
@@ -1518,9 +1548,10 @@ export function registerGitHandlers(ipcMain: IpcMain, services: AppServices): vo
         return { success: false, error: 'Project not found for session' };
       }
 
+      const wslContext = getWSLContextForSession(sessionId);
       // Get the effective main branch (override or auto-detected)
-      const mainBranch = await worktreeManager.getProjectMainBranch(project.path);
-      const hasChanges = await worktreeManager.hasChangesToRebase(session.worktreePath, mainBranch);
+      const mainBranch = await worktreeManager.getProjectMainBranch(project.path, wslContext);
+      const hasChanges = await worktreeManager.hasChangesToRebase(session.worktreePath, mainBranch, wslContext);
 
       return { success: true, data: hasChanges };
     } catch (error) {
@@ -1546,17 +1577,15 @@ export function registerGitHandlers(ipcMain: IpcMain, services: AppServices): vo
         return { success: false, error: 'Project not found for session' };
       }
 
+      const wslContext = getWSLContextForSession(sessionId);
       // Get the effective main branch (override or auto-detected)
-      const mainBranch = await worktreeManager.getProjectMainBranch(project.path);
+      const mainBranch = await worktreeManager.getProjectMainBranch(project.path, wslContext);
 
       // Get current branch name
-      const currentBranch = execSync('git branch --show-current', { 
-        cwd: session.worktreePath,
-        encoding: 'utf8' 
-      }).trim();
+      const currentBranch = gitExecSync('git branch --show-current', session.worktreePath, wslContext).trim();
 
       const originBranch = session.isMainRepo
-        ? await worktreeManager.getOriginBranch(session.worktreePath, mainBranch)
+        ? await worktreeManager.getOriginBranch(session.worktreePath, mainBranch, wslContext)
         : null;
 
       const rebaseCommands = worktreeManager.generateRebaseCommands(mainBranch);

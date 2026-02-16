@@ -164,6 +164,13 @@ export default function ProjectSettings({ project, isOpen, onClose, onUpdate, on
                   size="lg"
                   fullWidth
                 />
+                {project.wsl_enabled && project.wsl_distribution && (
+                  <div className="flex items-center gap-2 px-3 py-1.5 rounded-md bg-blue-500/10 border border-blue-500/20 text-blue-400 text-sm">
+                    <span className="font-semibold">WSL</span>
+                    <span className="text-blue-300/70">|</span>
+                    <span>{project.wsl_distribution}</span>
+                  </div>
+                )}
                 <div className="flex justify-end">
                   <Button
                     type="button"

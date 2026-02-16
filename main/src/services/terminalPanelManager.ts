@@ -7,6 +7,7 @@ import * as path from 'path';
 import { getShellPath } from '../utils/shellPath';
 import { ShellDetector } from '../utils/shellDetector';
 import type { AnalyticsManager } from './analyticsManager';
+import { getWSLShellSpawn, WSLContext } from '../utils/wslUtils';
 
 interface TerminalProcess {
   pty: pty.IPty;
@@ -16,6 +17,7 @@ interface TerminalProcess {
   commandHistory: string[];
   currentCommand: string;
   lastActivity: Date;
+  isWSL?: boolean;
 }
 
 export class TerminalPanelManager {
@@ -27,24 +29,36 @@ export class TerminalPanelManager {
     this.analyticsManager = analyticsManager;
   }
 
-  async initializeTerminal(panel: ToolPanel, cwd: string): Promise<void> {
+  async initializeTerminal(panel: ToolPanel, cwd: string, wslContext?: WSLContext | null): Promise<void> {
     if (this.terminals.has(panel.id)) {
       return;
     }
-    
-    
-    // Determine shell based on platform using the detector from the legacy terminal manager
-    const shellInfo = ShellDetector.getDefaultShell();
+
+
+    let shellPath: string;
+    let shellArgs: string[];
+    let spawnCwd: string | undefined = cwd;
+
+    if (wslContext && process.platform === 'win32') {
+      const wslShell = getWSLShellSpawn(wslContext.distribution, cwd);
+      shellPath = wslShell.path;
+      shellArgs = wslShell.args;
+      spawnCwd = undefined; // WSL handles cwd
+    } else {
+      const shellInfo = ShellDetector.getDefaultShell();
+      shellPath = shellInfo.path;
+      shellArgs = shellInfo.args || [];
+    }
 
     const isLinux = process.platform === 'linux';
     const enhancedPath = isLinux ? (process.env.PATH || '') : getShellPath();
-    
+
     // Create PTY process with enhanced environment
-    const ptyProcess = pty.spawn(shellInfo.path, shellInfo.args || [], {
+    const ptyProcess = pty.spawn(shellPath, shellArgs, {
       name: 'xterm-color',
       cols: 80,
       rows: 30,
-      cwd: cwd,
+      cwd: spawnCwd,
       env: {
         ...process.env,
         PATH: enhancedPath,
@@ -65,7 +79,8 @@ export class TerminalPanelManager {
       scrollbackBuffer: '',
       commandHistory: [],
       currentCommand: '',
-      lastActivity: new Date()
+      lastActivity: new Date(),
+      isWSL: !!(wslContext && process.platform === 'win32')
     };
     
     // Store in map
@@ -84,7 +99,7 @@ export class TerminalPanelManager {
       ...state.customState,
       isInitialized: true,
       cwd: cwd,
-      shellType: shellInfo.name || path.basename(shellInfo.path),
+      shellType: path.basename(shellPath),
       dimensions: { cols: 80, rows: 30 }
     } as TerminalPanelState;
 
@@ -300,13 +315,13 @@ export class TerminalPanelManager {
     return process.cwd();
   }
   
-  async restoreTerminalState(panel: ToolPanel, state: TerminalPanelState): Promise<void> {
+  async restoreTerminalState(panel: ToolPanel, state: TerminalPanelState, wslContext?: WSLContext | null): Promise<void> {
     if (!state.scrollbackBuffer || state.scrollbackBuffer.length === 0) {
       return;
     }
-    
+
     // Initialize terminal first
-    await this.initializeTerminal(panel, state.cwd || process.cwd());
+    await this.initializeTerminal(panel, state.cwd || process.cwd(), wslContext);
     
     const terminal = this.terminals.get(panel.id);
     if (!terminal) return;
@@ -356,17 +371,25 @@ export class TerminalPanelManager {
     if (!terminal) {
       return;
     }
-    
+
     // Save state before destroying
     this.saveTerminalState(panelId);
-    
+
     // Kill the PTY process
     try {
-      terminal.pty.kill();
+      if (terminal.isWSL) {
+        terminal.pty.write('exit\r');
+        // Give WSL a moment to gracefully exit
+        setTimeout(() => {
+          try { terminal.pty.kill(); } catch { /* already exited */ }
+        }, 500);
+      } else {
+        terminal.pty.kill();
+      }
     } catch (error) {
       console.error(`[TerminalPanelManager] Error killing terminal ${panelId}:`, error);
     }
-    
+
     // Remove from map
     this.terminals.delete(panelId);
   }

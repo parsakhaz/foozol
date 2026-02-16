@@ -138,24 +138,38 @@ export function registerPanelHandlers(ipcMain: IpcMain, services: AppServices) {
   
   // Panel initialization (lazy loading)
   ipcMain.handle('panels:initialize', async (_, panelId: string, options?: { cwd?: string; sessionId?: string }) => {
-    
+
     const panel = panelManager.getPanel(panelId);
     if (!panel) {
       throw new Error(`Panel ${panelId} not found`);
     }
-    
+
     // Mark panel as viewed
     if (!panel.state.hasBeenViewed) {
       panel.state.hasBeenViewed = true;
       await panelManager.updatePanel(panelId, { state: panel.state });
     }
-    
+
     // Initialize based on panel type
     if (panel.type === 'terminal') {
       const cwd = options?.cwd || process.cwd();
-      await terminalPanelManager.initializeTerminal(panel, cwd);
+
+      // Look up WSL context from session's project
+      let wslContext = null;
+      if (panel.sessionId) {
+        const session = services.sessionManager.getSession(panel.sessionId);
+        if (session?.projectId) {
+          const project = services.databaseService.getProject(session.projectId);
+          if (project) {
+            const { getWSLContextFromProject } = require('../utils/wslUtils');
+            wslContext = getWSLContextFromProject(project);
+          }
+        }
+      }
+
+      await terminalPanelManager.initializeTerminal(panel, cwd, wslContext);
     }
-    
+
     return true;
   });
   

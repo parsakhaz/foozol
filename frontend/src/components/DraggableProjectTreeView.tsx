@@ -131,6 +131,7 @@ export function DraggableProjectTreeView({ sessionSortAscending }: DraggableProj
   const { navigateToSessions } = useNavigationStore();
   const activeProjectId = useNavigationStore((state) => state.activeProjectId);
   const [detectedBranchForNewProject, setDetectedBranchForNewProject] = useState<string | null>(null);
+  const [detectedWSL, setDetectedWSL] = useState<{ distro: string; linuxPath: string } | null>(null);
   
   // Track recent sessions to handle auto-selection for multiple session creation
   const [pendingAutoSelect, setPendingAutoSelect] = useState<{
@@ -1165,7 +1166,7 @@ export function DraggableProjectTreeView({ sessionSortAscending }: DraggableProj
 
   const detectCurrentBranch = async (path: string) => {
     if (!path) return;
-    
+
     try {
       const response = await API.projects.detectBranch(path);
       if (response.success && response.data) {
@@ -1175,6 +1176,13 @@ export function DraggableProjectTreeView({ sessionSortAscending }: DraggableProj
       console.log('Could not detect branch');
       setDetectedBranchForNewProject(null);
     }
+  };
+
+  const parseWSLPathFrontend = (windowsPath: string): { distro: string; linuxPath: string } | null => {
+    const normalized = windowsPath.replace(/\\/g, '/');
+    const match = normalized.match(/^\/\/(wsl\.localhost|wsl\$)\/([^/]+)(\/.*)?$/i);
+    if (!match) return null;
+    return { distro: match[2], linuxPath: match[3] || '/' };
   };
 
   const handleCreateProject = async () => {
@@ -1199,8 +1207,9 @@ export function DraggableProjectTreeView({ sessionSortAscending }: DraggableProj
       setShowAddProjectDialog(false);
       setNewProject({ name: '', path: '', buildScript: '', runScript: '' });
       setDetectedBranchForNewProject(null);
+      setDetectedWSL(null);
       setShowValidationErrors(false);
-      
+
       // Add the new project to the list without reloading everything
       const newProjectWithSessions = { ...response.data, sessions: [], folders: [] };
       setProjectsWithSessions(prev => [...prev, newProjectWithSessions]);
@@ -2508,12 +2517,13 @@ export function DraggableProjectTreeView({ sessionSortAscending }: DraggableProj
       )}
       
       {/* Add Project Dialog */}
-      <Modal 
-        isOpen={showAddProjectDialog} 
+      <Modal
+        isOpen={showAddProjectDialog}
         onClose={() => {
           setShowAddProjectDialog(false);
           setNewProject({ name: '', path: '', buildScript: '', runScript: '' });
           setDetectedBranchForNewProject(null);
+          setDetectedWSL(null);
           setShowValidationErrors(false);
         }}
         size="lg"
@@ -2527,26 +2537,6 @@ export function DraggableProjectTreeView({ sessionSortAscending }: DraggableProj
                 <FolderIcon className="w-5 h-5 text-interactive" />
                 <h3 className="text-heading-3 font-semibold text-text-primary">Project Information</h3>
               </div>
-              
-              <FieldWithTooltip
-                label="Project Name"
-                tooltip="A descriptive name for your project that will appear in the project selector."
-                required
-              >
-                <EnhancedInput
-                  type="text"
-                  value={newProject.name}
-                  onChange={(e) => {
-                    setNewProject({ ...newProject, name: e.target.value });
-                    if (showValidationErrors) setShowValidationErrors(false);
-                  }}
-                  placeholder="Enter project name"
-                  size="lg"
-                  fullWidth
-                  required
-                  showRequiredIndicator={showValidationErrors}
-                />
-              </FieldWithTooltip>
 
               <FieldWithTooltip
                 label="Repository Path"
@@ -2558,8 +2548,17 @@ export function DraggableProjectTreeView({ sessionSortAscending }: DraggableProj
                     type="text"
                     value={newProject.path}
                     onChange={(e) => {
-                      setNewProject({ ...newProject, path: e.target.value });
-                      detectCurrentBranch(e.target.value);
+                      const pathVal = e.target.value;
+                      const folderName = pathVal.replace(/[\\/]+$/, '').split(/[\\/]/).pop() || '';
+                      setNewProject(prev => ({
+                        ...prev,
+                        path: pathVal,
+                        ...(prev.name === '' || prev.name === prev.path.replace(/[\\/]+$/, '').split(/[\\/]/).pop()
+                          ? { name: folderName }
+                          : {}),
+                      }));
+                      detectCurrentBranch(pathVal);
+                      setDetectedWSL(parseWSLPathFrontend(pathVal));
                       if (showValidationErrors) setShowValidationErrors(false);
                     }}
                     placeholder="/path/to/your/repository"
@@ -2568,6 +2567,13 @@ export function DraggableProjectTreeView({ sessionSortAscending }: DraggableProj
                     required
                     showRequiredIndicator={showValidationErrors}
                   />
+                  {detectedWSL && (
+                    <div className="flex items-center gap-2 px-3 py-1.5 rounded-md bg-blue-500/10 border border-blue-500/20 text-blue-400 text-sm">
+                      <span className="font-semibold">WSL</span>
+                      <span className="text-blue-300/70">|</span>
+                      <span>{detectedWSL.distro}</span>
+                    </div>
+                  )}
                   <div className="flex justify-end">
                     <Button
                       type="button"
@@ -2577,8 +2583,17 @@ export function DraggableProjectTreeView({ sessionSortAscending }: DraggableProj
                           buttonLabel: 'Select',
                         });
                         if (result.success && result.data) {
-                          setNewProject({ ...newProject, path: result.data });
-                          detectCurrentBranch(result.data);
+                          const selectedPath = result.data;
+                          const folderName = selectedPath.replace(/[\\/]+$/, '').split(/[\\/]/).pop() || '';
+                          setNewProject(prev => ({
+                            ...prev,
+                            path: selectedPath,
+                            ...(prev.name === '' || prev.name === prev.path.replace(/[\\/]+$/, '').split(/[\\/]/).pop()
+                              ? { name: folderName }
+                              : {}),
+                          }));
+                          detectCurrentBranch(selectedPath);
+                          setDetectedWSL(parseWSLPathFrontend(selectedPath));
                         }
                       }}
                       variant="secondary"
@@ -2588,6 +2603,26 @@ export function DraggableProjectTreeView({ sessionSortAscending }: DraggableProj
                     </Button>
                   </div>
                 </div>
+              </FieldWithTooltip>
+
+              <FieldWithTooltip
+                label="Project Name"
+                tooltip="A descriptive name for your project that will appear in the project selector. Defaults to the folder name."
+                required
+              >
+                <EnhancedInput
+                  type="text"
+                  value={newProject.name}
+                  onChange={(e) => {
+                    setNewProject({ ...newProject, name: e.target.value });
+                    if (showValidationErrors) setShowValidationErrors(false);
+                  }}
+                  placeholder={newProject.path ? 'Enter project name' : 'Select a repository first'}
+                  size="lg"
+                  fullWidth
+                  required
+                  showRequiredIndicator={showValidationErrors}
+                />
               </FieldWithTooltip>
             </div>
 
@@ -2656,6 +2691,7 @@ export function DraggableProjectTreeView({ sessionSortAscending }: DraggableProj
               setShowAddProjectDialog(false);
               setNewProject({ name: '', path: '', buildScript: '', runScript: '' });
               setDetectedBranchForNewProject(null);
+              setDetectedWSL(null);
               setShowValidationErrors(false);
             }}
             variant="ghost"

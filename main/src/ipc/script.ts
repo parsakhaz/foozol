@@ -5,8 +5,14 @@ import { logsManager } from '../services/panels/logPanel/logsManager';
 import { panelManager } from '../services/panelManager';
 import { ExecException } from 'child_process';
 import { scriptExecutionTracker } from '../services/scriptExecutionTracker';
+import { getWSLContextFromProject, WSLContext } from '../utils/wslUtils';
 
 export function registerScriptHandlers(ipcMain: IpcMain, { sessionManager }: AppServices): void {
+  const getWSLContextForSession = (sessionId: string): WSLContext | null => {
+    const project = sessionManager.getProjectForSession(sessionId);
+    if (!project) return null;
+    return getWSLContextFromProject(project);
+  };
   // Script execution handlers
   ipcMain.handle('sessions:has-run-script', async (_event, sessionId: string) => {
     try {
@@ -82,7 +88,8 @@ export function registerScriptHandlers(ipcMain: IpcMain, { sessionManager }: App
 
       // Use logs panel instead of old script running mechanism
       const commandString = commands.join(' && ');
-      await logsManager.runScript(sessionId, commandString, session.worktreePath);
+      const wslContext = getWSLContextForSession(sessionId);
+      await logsManager.runScript(sessionId, commandString, session.worktreePath, wslContext);
 
       console.log(`[Script] Script started successfully for session ${sessionId}`);
 
@@ -280,7 +287,8 @@ export function registerScriptHandlers(ipcMain: IpcMain, { sessionManager }: App
   // Logs panel specific handlers
   ipcMain.handle('logs:runScript', async (_event, sessionId: string, command: string, cwd: string) => {
     try {
-      await logsManager.runScript(sessionId, command, cwd);
+      const wslContext = getWSLContextForSession(sessionId);
+      await logsManager.runScript(sessionId, command, cwd, wslContext);
       return { success: true };
     } catch (error) {
       console.error('Failed to run script in logs panel:', error);

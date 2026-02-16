@@ -6,6 +6,7 @@ import { getShellPath } from '../utils/shellPath';
 import { withLock } from '../utils/mutex';
 import type { ConfigManager } from './configManager';
 import type { AnalyticsManager } from './analyticsManager';
+import { WSLContext, posixJoin, wrapCommandForWSL, getWSLContextFromProject } from '../utils/wslUtils';
 
 // Interface for raw commit data
 interface RawCommitData {
@@ -32,6 +33,17 @@ async function execWithShellPath(command: string, options?: { cwd?: string }): P
   });
 }
 
+// WSL-aware exec helper
+async function execForProject(command: string, cwd: string, wslContext?: WSLContext | null): Promise<{ stdout: string; stderr: string }> {
+  if (wslContext) {
+    const wrappedCommand = wrapCommandForWSL(command, wslContext.distribution, cwd);
+    return execAsync(wrappedCommand, {
+      env: { ...process.env, PATH: getShellPath() }
+    });
+  }
+  return execWithShellPath(command, { cwd });
+}
+
 export class WorktreeManager {
   private projectsCache: Map<string, { baseDir: string }> = new Map();
 
@@ -42,38 +54,50 @@ export class WorktreeManager {
     // No longer initialized with a single repo path
   }
 
-  private getProjectPaths(projectPath: string, worktreeFolder?: string) {
+  private getProjectPaths(projectPath: string, worktreeFolder?: string, wslContext?: WSLContext | null) {
     const cacheKey = `${projectPath}:${worktreeFolder || 'worktrees'}`;
     if (!this.projectsCache.has(cacheKey)) {
       const folderName = worktreeFolder || 'worktrees';
       let baseDir: string;
-      
-      // Check if worktreeFolder is an absolute path
-      if (worktreeFolder && (worktreeFolder.startsWith('/') || worktreeFolder.includes(':'))) {
-        baseDir = worktreeFolder;
+
+      if (wslContext) {
+        if (worktreeFolder && worktreeFolder.startsWith('/')) {
+          baseDir = worktreeFolder;
+        } else {
+          baseDir = posixJoin(projectPath, folderName);
+        }
       } else {
-        baseDir = join(projectPath, folderName);
+        // Check if worktreeFolder is an absolute path
+        if (worktreeFolder && (worktreeFolder.startsWith('/') || worktreeFolder.includes(':'))) {
+          baseDir = worktreeFolder;
+        } else {
+          baseDir = join(projectPath, folderName);
+        }
       }
-      
+
       this.projectsCache.set(cacheKey, { baseDir });
     }
     return this.projectsCache.get(cacheKey)!;
   }
 
-  async initializeProject(projectPath: string, worktreeFolder?: string): Promise<void> {
-    const { baseDir } = this.getProjectPaths(projectPath, worktreeFolder);
+  async initializeProject(projectPath: string, worktreeFolder?: string, wslContext?: WSLContext | null): Promise<void> {
+    const { baseDir } = this.getProjectPaths(projectPath, worktreeFolder, wslContext);
     try {
-      await mkdir(baseDir, { recursive: true });
+      if (wslContext) {
+        await execForProject(`mkdir -p '${baseDir}'`, baseDir, wslContext);
+      } else {
+        await mkdir(baseDir, { recursive: true });
+      }
     } catch (error) {
       console.error('Failed to create worktrees directory:', error);
     }
   }
 
-  async createWorktree(projectPath: string, name: string, branch?: string, baseBranch?: string, worktreeFolder?: string): Promise<{ worktreePath: string; baseCommit: string; baseBranch: string }> {
+  async createWorktree(projectPath: string, name: string, branch?: string, baseBranch?: string, worktreeFolder?: string, wslContext?: WSLContext | null): Promise<{ worktreePath: string; baseCommit: string; baseBranch: string }> {
     return await withLock(`worktree-create-${projectPath}-${name}`, async () => {
-      
-      const { baseDir } = this.getProjectPaths(projectPath, worktreeFolder);
-      const worktreePath = join(baseDir, name);
+
+      const { baseDir } = this.getProjectPaths(projectPath, worktreeFolder, wslContext);
+      const worktreePath = wslContext ? posixJoin(baseDir, name) : join(baseDir, name);
       const branchName = branch || name;
     
 
@@ -81,18 +105,18 @@ export class WorktreeManager {
       // First check if this is a git repository
       let isGitRepo = false;
       try {
-        await execWithShellPath(`git rev-parse --is-inside-work-tree`, { cwd: projectPath });
+        await execForProject(`git rev-parse --is-inside-work-tree`, projectPath, wslContext);
         isGitRepo = true;
       } catch (error) {
         // Initialize git repository
-        await execWithShellPath(`git init`, { cwd: projectPath });
+        await execForProject(`git init`, projectPath, wslContext);
       }
 
       // Clean up any existing worktree directory first
       try {
         // Use cross-platform approach without shell redirection
         try {
-          await execWithShellPath(`git worktree remove "${worktreePath}" --force`, { cwd: projectPath });
+          await execForProject(`git worktree remove "${worktreePath}" --force`, projectPath, wslContext);
         } catch {
           // Ignore cleanup errors
         }
@@ -103,17 +127,17 @@ export class WorktreeManager {
       // Check if the repository has any commits
       let hasCommits = false;
       try {
-        await execWithShellPath(`git rev-parse HEAD`, { cwd: projectPath });
+        await execForProject(`git rev-parse HEAD`, projectPath, wslContext);
         hasCommits = true;
       } catch (error) {
         // Repository has no commits yet, create initial commit
         // Use cross-platform approach without shell operators
         try {
-          await execWithShellPath(`git add -A`, { cwd: projectPath });
+          await execForProject(`git add -A`, projectPath, wslContext);
         } catch {
           // Ignore add errors (no files to add)
         }
-        await execWithShellPath(`git commit -m "Initial commit" --allow-empty`, { cwd: projectPath });
+        await execForProject(`git commit -m "Initial commit" --allow-empty`, projectPath, wslContext);
         hasCommits = true;
       }
 
@@ -121,7 +145,7 @@ export class WorktreeManager {
       const checkBranchCmd = `git show-ref --verify --quiet refs/heads/${branchName}`;
       let branchExists = false;
       try {
-        await execWithShellPath(checkBranchCmd, { cwd: projectPath });
+        await execForProject(checkBranchCmd, projectPath, wslContext);
         branchExists = true;
       } catch {
         // Branch doesn't exist, will create it
@@ -130,32 +154,32 @@ export class WorktreeManager {
       // Capture the base commit before creating worktree
       let baseCommit: string;
       let actualBaseBranch: string;
-      
+
       if (branchExists) {
         // Use existing branch
-        await execWithShellPath(`git worktree add "${worktreePath}" ${branchName}`, { cwd: projectPath });
-        
+        await execForProject(`git worktree add "${worktreePath}" ${branchName}`, projectPath, wslContext);
+
         // Get the commit this branch is based on
-        baseCommit = (await execWithShellPath(`git rev-parse ${branchName}`, { cwd: projectPath })).stdout.trim();
+        baseCommit = (await execForProject(`git rev-parse ${branchName}`, projectPath, wslContext)).stdout.trim();
         actualBaseBranch = branchName;
       } else {
         // Create new branch from specified base branch (or current HEAD if not specified)
         const baseRef = baseBranch || 'HEAD';
         actualBaseBranch = baseBranch || 'HEAD';
-        
+
         // Verify that the base branch exists if specified
         if (baseBranch) {
           try {
-            await execWithShellPath(`git show-ref --verify --quiet refs/heads/${baseBranch}`, { cwd: projectPath });
+            await execForProject(`git show-ref --verify --quiet refs/heads/${baseBranch}`, projectPath, wslContext);
           } catch {
             throw new Error(`Base branch '${baseBranch}' does not exist`);
           }
         }
-        
+
         // Capture the base commit before creating the worktree
-        baseCommit = (await execWithShellPath(`git rev-parse ${baseRef}`, { cwd: projectPath })).stdout.trim();
-        
-        await execWithShellPath(`git worktree add -b ${branchName} "${worktreePath}" ${baseRef}`, { cwd: projectPath });
+        baseCommit = (await execForProject(`git rev-parse ${baseRef}`, projectPath, wslContext)).stdout.trim();
+
+        await execForProject(`git worktree add -b ${branchName} "${worktreePath}" ${baseRef}`, projectPath, wslContext);
       }
       
       console.log(`[WorktreeManager] Worktree created successfully at: ${worktreePath}`);
@@ -175,13 +199,13 @@ export class WorktreeManager {
     });
   }
 
-  async removeWorktree(projectPath: string, name: string, worktreeFolder?: string, sessionCreatedAt?: Date): Promise<void> {
+  async removeWorktree(projectPath: string, name: string, worktreeFolder?: string, sessionCreatedAt?: Date, wslContext?: WSLContext | null): Promise<void> {
     return await withLock(`worktree-remove-${projectPath}-${name}`, async () => {
-      const { baseDir } = this.getProjectPaths(projectPath, worktreeFolder);
-      const worktreePath = join(baseDir, name);
+      const { baseDir } = this.getProjectPaths(projectPath, worktreeFolder, wslContext);
+      const worktreePath = wslContext ? posixJoin(baseDir, name) : join(baseDir, name);
 
       try {
-        await execWithShellPath(`git worktree remove "${worktreePath}" --force`, { cwd: projectPath });
+        await execForProject(`git worktree remove "${worktreePath}" --force`, projectPath, wslContext);
 
         // Track worktree cleanup
         if (this.analyticsManager && sessionCreatedAt) {
@@ -208,9 +232,9 @@ export class WorktreeManager {
     });
   }
 
-  async listWorktrees(projectPath: string): Promise<Array<{ path: string; branch: string }>> {
+  async listWorktrees(projectPath: string, wslContext?: WSLContext | null): Promise<Array<{ path: string; branch: string }>> {
     try {
-      const { stdout } = await execWithShellPath(`git worktree list --porcelain`, { cwd: projectPath });
+      const { stdout } = await execForProject(`git worktree list --porcelain`, projectPath, wslContext);
       
       const worktrees: Array<{ path: string; branch: string }> = [];
       const lines = stdout.split('\n');
@@ -244,13 +268,13 @@ export class WorktreeManager {
     }
   }
 
-  async listBranches(projectPath: string): Promise<Array<{ name: string; isCurrent: boolean; hasWorktree: boolean }>> {
+  async listBranches(projectPath: string, wslContext?: WSLContext | null): Promise<Array<{ name: string; isCurrent: boolean; hasWorktree: boolean }>> {
     try {
       // Get all local branches
-      const { stdout: branchOutput } = await execWithShellPath(`git branch`, { cwd: projectPath });
-      
+      const { stdout: branchOutput } = await execForProject(`git branch`, projectPath, wslContext);
+
       // Get all worktrees to identify which branches have worktrees
-      const worktrees = await this.listWorktrees(projectPath);
+      const worktrees = await this.listWorktrees(projectPath, wslContext);
       const worktreeBranches = new Set(worktrees.map(w => w.branch));
       
       const branches: Array<{ name: string; isCurrent: boolean; hasWorktree: boolean }> = [];
@@ -284,11 +308,11 @@ export class WorktreeManager {
     }
   }
 
-  async getProjectMainBranch(projectPath: string): Promise<string> {
-    
+  async getProjectMainBranch(projectPath: string, wslContext?: WSLContext | null): Promise<string> {
+
     try {
       // ONLY check the current branch in the project root directory
-      const currentBranchResult = await execWithShellPath(`git branch --show-current`, { cwd: projectPath });
+      const currentBranchResult = await execForProject(`git branch --show-current`, projectPath, wslContext);
       const currentBranch = currentBranchResult.stdout.trim();
       
       if (currentBranch) {
@@ -317,13 +341,13 @@ export class WorktreeManager {
     return await this.getProjectMainBranch(project.path);
   }
 
-  async hasChangesToRebase(worktreePath: string, mainBranch: string): Promise<boolean> {
+  async hasChangesToRebase(worktreePath: string, mainBranch: string, wslContext?: WSLContext | null): Promise<boolean> {
     try {
       // Check if main branch has commits that the current branch doesn't have
       // Use cross-platform approach
       let stdout = '0';
       try {
-        const result = await execWithShellPath(`git rev-list --count HEAD..${mainBranch}`, { cwd: worktreePath });
+        const result = await execForProject(`git rev-list --count HEAD..${mainBranch}`, worktreePath, wslContext);
         stdout = result.stdout;
       } catch {
         // Error checking, assume no changes
@@ -337,33 +361,35 @@ export class WorktreeManager {
     }
   }
 
-  async checkForRebaseConflicts(worktreePath: string, mainBranch: string): Promise<{
+  async checkForRebaseConflicts(worktreePath: string, mainBranch: string, wslContext?: WSLContext | null): Promise<{
     hasConflicts: boolean;
     conflictingFiles?: string[];
     conflictingCommits?: { ours: string[]; theirs: string[] };
     canAutoMerge?: boolean;
   }> {
     try {
-      
+
       // First check if there are any changes to rebase
-      const hasChanges = await this.hasChangesToRebase(worktreePath, mainBranch);
+      const hasChanges = await this.hasChangesToRebase(worktreePath, mainBranch, wslContext);
       if (!hasChanges) {
         return { hasConflicts: false, canAutoMerge: true };
       }
 
       // Get the merge base
-      const { stdout: mergeBase } = await execWithShellPath(
+      const { stdout: mergeBase } = await execForProject(
         `git merge-base HEAD ${mainBranch}`,
-        { cwd: worktreePath }
+        worktreePath,
+        wslContext
       );
       const base = mergeBase.trim();
 
       // Try a dry-run merge to detect conflicts
       // We use merge-tree to check for conflicts without modifying the working tree
       try {
-        const { stdout: mergeTreeOutput } = await execWithShellPath(
+        const { stdout: mergeTreeOutput } = await execForProject(
           `git merge-tree ${base} HEAD ${mainBranch}`,
-          { cwd: worktreePath }
+          worktreePath,
+          wslContext
         );
         
         // Parse merge-tree output for conflicts
@@ -372,29 +398,33 @@ export class WorktreeManager {
         
         if (hasConflicts) {
           // Get list of files that would conflict
-          const { stdout: diffOutput } = await execWithShellPath(
+          const { stdout: diffOutput } = await execForProject(
             `git diff --name-only ${base}...HEAD`,
-            { cwd: worktreePath }
+            worktreePath,
+            wslContext
           );
           const ourFiles = diffOutput.trim().split('\n').filter(f => f);
-          
-          const { stdout: theirDiffOutput } = await execWithShellPath(
+
+          const { stdout: theirDiffOutput } = await execForProject(
             `git diff --name-only ${base}...${mainBranch}`,
-            { cwd: worktreePath }
+            worktreePath,
+            wslContext
           );
           const theirFiles = theirDiffOutput.trim().split('\n').filter(f => f);
-          
+
           // Find files modified in both branches
           const conflictingFiles = ourFiles.filter(f => theirFiles.includes(f));
-          
+
           // Get commit info for better error reporting
-          const { stdout: ourCommits } = await execWithShellPath(
+          const { stdout: ourCommits } = await execForProject(
             `git log --oneline ${base}..HEAD`,
-            { cwd: worktreePath }
+            worktreePath,
+            wslContext
           );
-          const { stdout: theirCommits } = await execWithShellPath(
+          const { stdout: theirCommits } = await execForProject(
             `git log --oneline ${base}..${mainBranch}`,
-            { cwd: worktreePath }
+            worktreePath,
+            wslContext
           );
           
           console.log(`[WorktreeManager] Found conflicts in files: ${conflictingFiles.join(', ')}`);
@@ -418,30 +448,34 @@ export class WorktreeManager {
         console.log(`[WorktreeManager] merge-tree not available, using fallback conflict detection`);
         
         // Get files changed in both branches
-        const { stdout: diffOutput } = await execWithShellPath(
+        const { stdout: diffOutput } = await execForProject(
           `git diff --name-only ${base}...HEAD`,
-          { cwd: worktreePath }
+          worktreePath,
+          wslContext
         );
         const ourFiles = diffOutput.trim().split('\n').filter(f => f);
-        
-        const { stdout: theirDiffOutput } = await execWithShellPath(
+
+        const { stdout: theirDiffOutput } = await execForProject(
           `git diff --name-only ${base}...${mainBranch}`,
-          { cwd: worktreePath }
+          worktreePath,
+          wslContext
         );
         const theirFiles = theirDiffOutput.trim().split('\n').filter(f => f);
-        
+
         // Find files modified in both branches (potential conflicts)
         const conflictingFiles = ourFiles.filter(f => theirFiles.includes(f));
-        
+
         if (conflictingFiles.length > 0) {
           // Get commit info
-          const { stdout: ourCommits } = await execWithShellPath(
+          const { stdout: ourCommits } = await execForProject(
             `git log --oneline ${base}..HEAD`,
-            { cwd: worktreePath }
+            worktreePath,
+            wslContext
           );
-          const { stdout: theirCommits } = await execWithShellPath(
+          const { stdout: theirCommits } = await execForProject(
             `git log --oneline ${base}..${mainBranch}`,
-            { cwd: worktreePath }
+            worktreePath,
+            wslContext
           );
           
           console.log(`[WorktreeManager] Potential conflicts in files: ${conflictingFiles.join(', ')}`);
@@ -469,7 +503,7 @@ export class WorktreeManager {
     }
   }
 
-  async rebaseMainIntoWorktree(worktreePath: string, mainBranch: string): Promise<void> {
+  async rebaseMainIntoWorktree(worktreePath: string, mainBranch: string, wslContext?: WSLContext | null): Promise<void> {
     return await withLock(`git-rebase-${worktreePath}`, async () => {
       const executedCommands: string[] = [];
       let lastOutput = '';
@@ -480,7 +514,7 @@ export class WorktreeManager {
         // Rebase the current worktree branch onto local main branch
         const command = `git rebase ${mainBranch}`;
         executedCommands.push(`${command} (in ${worktreePath})`);
-        const rebaseResult = await execWithShellPath(command, { cwd: worktreePath });
+        const rebaseResult = await execForProject(command, worktreePath, wslContext);
         lastOutput = rebaseResult.stdout || rebaseResult.stderr || '';
 
         // Track successful rebase
@@ -534,15 +568,15 @@ export class WorktreeManager {
     });
   }
 
-  async abortRebase(worktreePath: string): Promise<void> {
+  async abortRebase(worktreePath: string, wslContext?: WSLContext | null): Promise<void> {
     try {
       // Check if we're in the middle of a rebase
       const statusCommand = `git status --porcelain=v1`;
-      const { stdout: statusOut } = await execWithShellPath(statusCommand, { cwd: worktreePath });
-      
+      const { stdout: statusOut } = await execForProject(statusCommand, worktreePath, wslContext);
+
       // Abort the rebase
       const command = `git rebase --abort`;
-      const { stdout, stderr } = await execWithShellPath(command, { cwd: worktreePath });
+      const { stdout, stderr } = await execForProject(command, worktreePath, wslContext);
       
       if (stderr && !stderr.includes('No rebase in progress')) {
         throw new Error(`Failed to abort rebase: ${stderr}`);
@@ -554,7 +588,7 @@ export class WorktreeManager {
     }
   }
 
-  async squashAndMergeWorktreeToMain(projectPath: string, worktreePath: string, mainBranch: string, commitMessage: string): Promise<void> {
+  async squashAndMergeWorktreeToMain(projectPath: string, worktreePath: string, mainBranch: string, commitMessage: string, wslContext?: WSLContext | null): Promise<void> {
     return await withLock(`git-squash-merge-${worktreePath}`, async () => {
       const executedCommands: string[] = [];
       let lastOutput = '';
@@ -566,20 +600,20 @@ export class WorktreeManager {
         // Get current branch name in worktree
         let command = `git branch --show-current`;
         executedCommands.push(`git branch --show-current (in ${worktreePath})`);
-        const { stdout: currentBranch, stderr: stderr1 } = await execWithShellPath(command, { cwd: worktreePath });
+        const { stdout: currentBranch, stderr: stderr1 } = await execForProject(command, worktreePath, wslContext);
         lastOutput = currentBranch || stderr1 || '';
         const branchName = currentBranch.trim();
 
         // Get the base commit (where the worktree branch diverged from main)
         command = `git merge-base ${mainBranch} HEAD`;
         executedCommands.push(`git merge-base ${mainBranch} HEAD (in ${worktreePath})`);
-        const { stdout: baseCommit, stderr: stderr2 } = await execWithShellPath(command, { cwd: worktreePath });
+        const { stdout: baseCommit, stderr: stderr2 } = await execForProject(command, worktreePath, wslContext);
         lastOutput = baseCommit || stderr2 || '';
         const base = baseCommit.trim();
 
         // Check if there are any changes to squash
         command = `git log --oneline ${base}..HEAD`;
-        const { stdout: commits, stderr: stderr3 } = await execWithShellPath(command, { cwd: worktreePath });
+        const { stdout: commits, stderr: stderr3 } = await execForProject(command, worktreePath, wslContext);
         lastOutput = commits || stderr3 || '';
         if (!commits.trim()) {
           throw new Error(`No commits to squash. The branch is already up to date with ${mainBranch}.`);
@@ -589,14 +623,14 @@ export class WorktreeManager {
         command = `git rebase ${mainBranch}`;
         executedCommands.push(`git rebase ${mainBranch} (in ${worktreePath})`);
         try {
-          const rebaseWorktreeResult = await execWithShellPath(command, { cwd: worktreePath });
+          const rebaseWorktreeResult = await execForProject(command, worktreePath, wslContext);
           lastOutput = rebaseWorktreeResult.stdout || rebaseWorktreeResult.stderr || '';
           console.log(`[WorktreeManager] Successfully rebased worktree onto ${mainBranch} before squashing`);
         } catch (error: unknown) {
           const err = error as Error & { stderr?: string; stdout?: string };
           // If rebase fails, abort it in the worktree
           try {
-            await execWithShellPath(`git rebase --abort`, { cwd: worktreePath });
+            await execForProject(`git rebase --abort`, worktreePath, wslContext);
           } catch {
             // Ignore abort errors
           }
@@ -610,7 +644,7 @@ export class WorktreeManager {
         // Now squash all commits since base into one
         command = `git reset --soft ${base}`;
         executedCommands.push(`git reset --soft ${base} (in ${worktreePath})`);
-        const resetResult = await execWithShellPath(command, { cwd: worktreePath });
+        const resetResult = await execForProject(command, worktreePath, wslContext);
         lastOutput = resetResult.stdout || resetResult.stderr || '';
 
         // Get config to check if Crystal footer is enabled (default: true)
@@ -628,13 +662,13 @@ Co-Authored-By: foozol <foozol@stravu.com>` : commitMessage;
         const escapedMessage = fullMessage.replace(/"/g, '\\"');
         command = `git commit -m "${escapedMessage}"`;
         executedCommands.push(`git commit -m "..." (in ${worktreePath})`);
-        const commitResult = await execWithShellPath(command, { cwd: worktreePath });
+        const commitResult = await execForProject(command, worktreePath, wslContext);
         lastOutput = commitResult.stdout || commitResult.stderr || '';
 
         // Switch to main branch in the main repository
         command = `git checkout ${mainBranch}`;
         executedCommands.push(`git checkout ${mainBranch} (in ${projectPath})`);
-        const checkoutResult = await execWithShellPath(command, { cwd: projectPath });
+        const checkoutResult = await execForProject(command, projectPath, wslContext);
         lastOutput = checkoutResult.stdout || checkoutResult.stderr || '';
 
         // SAFETY CHECK 2: Use --ff-only merge to prevent history rewriting
@@ -642,7 +676,7 @@ Co-Authored-By: foozol <foozol@stravu.com>` : commitMessage;
         command = `git merge --ff-only ${branchName}`;
         executedCommands.push(`git merge --ff-only ${branchName} (in ${projectPath})`);
         try {
-          const mergeResult = await execWithShellPath(command, { cwd: projectPath });
+          const mergeResult = await execForProject(command, projectPath, wslContext);
           lastOutput = mergeResult.stdout || mergeResult.stderr || '';
           console.log(`[WorktreeManager] Successfully fast-forwarded ${mainBranch} to ${branchName}`);
         } catch (error: unknown) {
@@ -714,7 +748,7 @@ Co-Authored-By: foozol <foozol@stravu.com>` : commitMessage;
     });
   }
 
-  async mergeWorktreeToMain(projectPath: string, worktreePath: string, mainBranch: string): Promise<void> {
+  async mergeWorktreeToMain(projectPath: string, worktreePath: string, mainBranch: string, wslContext?: WSLContext | null): Promise<void> {
     return await withLock(`git-merge-worktree-${worktreePath}`, async () => {
       const executedCommands: string[] = [];
       let lastOutput = '';
@@ -725,13 +759,13 @@ Co-Authored-By: foozol <foozol@stravu.com>` : commitMessage;
         // Get current branch name in worktree
         let command = `git branch --show-current`;
         executedCommands.push(`git branch --show-current (in ${worktreePath})`);
-        const { stdout: currentBranch, stderr: stderr1 } = await execWithShellPath(command, { cwd: worktreePath });
+        const { stdout: currentBranch, stderr: stderr1 } = await execForProject(command, worktreePath, wslContext);
         lastOutput = currentBranch || stderr1 || '';
         const branchName = currentBranch.trim();
 
         // Check if there are any changes to merge
         command = `git log --oneline ${mainBranch}..HEAD`;
-        const { stdout: commits, stderr: stderr2 } = await execWithShellPath(command, { cwd: worktreePath });
+        const { stdout: commits, stderr: stderr2 } = await execForProject(command, worktreePath, wslContext);
         lastOutput = commits || stderr2 || '';
         if (!commits.trim()) {
           throw new Error(`No commits to merge. The branch is already up to date with ${mainBranch}.`);
@@ -741,14 +775,14 @@ Co-Authored-By: foozol <foozol@stravu.com>` : commitMessage;
         command = `git rebase ${mainBranch}`;
         executedCommands.push(`git rebase ${mainBranch} (in ${worktreePath})`);
         try {
-          const rebaseWorktreeResult = await execWithShellPath(command, { cwd: worktreePath });
+          const rebaseWorktreeResult = await execForProject(command, worktreePath, wslContext);
           lastOutput = rebaseWorktreeResult.stdout || rebaseWorktreeResult.stderr || '';
           console.log(`[WorktreeManager] Successfully rebased worktree onto ${mainBranch}`);
         } catch (error: unknown) {
           const err = error as Error & { stderr?: string; stdout?: string };
           // If rebase fails, abort it in the worktree
           try {
-            await execWithShellPath(`git rebase --abort`, { cwd: worktreePath });
+            await execForProject(`git rebase --abort`, worktreePath, wslContext);
           } catch {
             // Ignore abort errors
           }
@@ -762,7 +796,7 @@ Co-Authored-By: foozol <foozol@stravu.com>` : commitMessage;
         // Switch to main branch in the main repository
         command = `git checkout ${mainBranch}`;
         executedCommands.push(`git checkout ${mainBranch} (in ${projectPath})`);
-        const checkoutResult = await execWithShellPath(command, { cwd: projectPath });
+        const checkoutResult = await execForProject(command, projectPath, wslContext);
         lastOutput = checkoutResult.stdout || checkoutResult.stderr || '';
 
         // SAFETY CHECK 2: Use --ff-only merge to prevent history rewriting
@@ -770,7 +804,7 @@ Co-Authored-By: foozol <foozol@stravu.com>` : commitMessage;
         command = `git merge --ff-only ${branchName}`;
         executedCommands.push(`git merge --ff-only ${branchName} (in ${projectPath})`);
         try {
-          const mergeResult = await execWithShellPath(command, { cwd: projectPath });
+          const mergeResult = await execForProject(command, projectPath, wslContext);
           lastOutput = mergeResult.stdout || mergeResult.stderr || '';
           console.log(`[WorktreeManager] Successfully fast-forwarded ${mainBranch} to ${branchName}`);
         } catch (error: unknown) {
@@ -839,9 +873,9 @@ Co-Authored-By: foozol <foozol@stravu.com>` : commitMessage;
     ];
   }
 
-  async gitPull(worktreePath: string): Promise<{ output: string }> {
+  async gitPull(worktreePath: string, wslContext?: WSLContext | null): Promise<{ output: string }> {
     try {
-      const { stdout, stderr } = await execWithShellPath('git pull', { cwd: worktreePath });
+      const { stdout, stderr } = await execForProject('git pull', worktreePath, wslContext);
       const output = stdout || stderr || 'Pull completed successfully';
       
       return { output };
@@ -857,12 +891,12 @@ Co-Authored-By: foozol <foozol@stravu.com>` : commitMessage;
     }
   }
 
-  async gitPush(worktreePath: string): Promise<{ output: string }> {
+  async gitPush(worktreePath: string, wslContext?: WSLContext | null): Promise<{ output: string }> {
     try {
       // Check if branch has an upstream configured
       let hasUpstream = false;
       try {
-        await execWithShellPath('git rev-parse --abbrev-ref --symbolic-full-name @{u}', { cwd: worktreePath });
+        await execForProject('git rev-parse --abbrev-ref --symbolic-full-name @{u}', worktreePath, wslContext);
         hasUpstream = true;
       } catch {
         // No upstream configured
@@ -871,7 +905,7 @@ Co-Authored-By: foozol <foozol@stravu.com>` : commitMessage;
 
       // Use -u to set upstream on first push, otherwise regular push
       const pushCommand = hasUpstream ? 'git push' : 'git push -u origin HEAD';
-      const { stdout, stderr } = await execWithShellPath(pushCommand, { cwd: worktreePath });
+      const { stdout, stderr } = await execForProject(pushCommand, worktreePath, wslContext);
       const output = stdout || stderr || 'Push completed successfully';
 
       return { output };
@@ -887,9 +921,9 @@ Co-Authored-By: foozol <foozol@stravu.com>` : commitMessage;
     }
   }
 
-  async gitFetch(worktreePath: string): Promise<{ output: string }> {
+  async gitFetch(worktreePath: string, wslContext?: WSLContext | null): Promise<{ output: string }> {
     try {
-      const { stdout, stderr } = await execWithShellPath('git fetch --all', { cwd: worktreePath });
+      const { stdout, stderr } = await execForProject('git fetch --all', worktreePath, wslContext);
       const output = stdout || stderr || 'Fetch completed successfully';
 
       return { output };
@@ -905,11 +939,11 @@ Co-Authored-By: foozol <foozol@stravu.com>` : commitMessage;
     }
   }
 
-  async gitStash(worktreePath: string, message?: string): Promise<{ output: string }> {
+  async gitStash(worktreePath: string, message?: string, wslContext?: WSLContext | null): Promise<{ output: string }> {
     try {
       const stashMessage = message || 'Crystal stash';
       const escapedMessage = stashMessage.replace(/"/g, '\\"');
-      const { stdout, stderr } = await execWithShellPath(`git stash push -m "${escapedMessage}"`, { cwd: worktreePath });
+      const { stdout, stderr } = await execForProject(`git stash push -m "${escapedMessage}"`, worktreePath, wslContext);
       const output = stdout || stderr || 'Changes stashed successfully';
 
       return { output };
@@ -925,9 +959,9 @@ Co-Authored-By: foozol <foozol@stravu.com>` : commitMessage;
     }
   }
 
-  async gitStashPop(worktreePath: string): Promise<{ output: string }> {
+  async gitStashPop(worktreePath: string, wslContext?: WSLContext | null): Promise<{ output: string }> {
     try {
-      const { stdout, stderr } = await execWithShellPath('git stash pop', { cwd: worktreePath });
+      const { stdout, stderr } = await execForProject('git stash pop', worktreePath, wslContext);
       const output = stdout || stderr || 'Stash applied successfully';
 
       return { output };
@@ -943,23 +977,23 @@ Co-Authored-By: foozol <foozol@stravu.com>` : commitMessage;
     }
   }
 
-  async hasStash(worktreePath: string): Promise<boolean> {
+  async hasStash(worktreePath: string, wslContext?: WSLContext | null): Promise<boolean> {
     try {
-      const { stdout } = await execWithShellPath('git stash list', { cwd: worktreePath });
+      const { stdout } = await execForProject('git stash list', worktreePath, wslContext);
       return stdout.trim().length > 0;
     } catch {
       return false;
     }
   }
 
-  async gitStageAllAndCommit(worktreePath: string, message: string): Promise<{ output: string }> {
+  async gitStageAllAndCommit(worktreePath: string, message: string, wslContext?: WSLContext | null): Promise<{ output: string }> {
     try {
       // Stage all changes including untracked files
-      await execWithShellPath('git add -A', { cwd: worktreePath });
+      await execForProject('git add -A', worktreePath, wslContext);
 
       // Commit with message
       const escapedMessage = message.replace(/"/g, '\\"');
-      const { stdout, stderr } = await execWithShellPath(`git commit -m "${escapedMessage}"`, { cwd: worktreePath });
+      const { stdout, stderr } = await execForProject(`git commit -m "${escapedMessage}"`, worktreePath, wslContext);
       const output = stdout || stderr || 'Committed successfully';
 
       return { output };
@@ -975,11 +1009,12 @@ Co-Authored-By: foozol <foozol@stravu.com>` : commitMessage;
     }
   }
 
-  async getLastCommits(worktreePath: string, count: number = 20): Promise<RawCommitData[]> {
+  async getLastCommits(worktreePath: string, count: number = 20, wslContext?: WSLContext | null): Promise<RawCommitData[]> {
     try {
-      const { stdout } = await execWithShellPath(
+      const { stdout } = await execForProject(
         `git log -${count} --pretty=format:'%H|%s|%ai|%an' --shortstat`,
-        { cwd: worktreePath }
+        worktreePath,
+        wslContext
       );
       
       const commits: RawCommitData[] = [];
@@ -1035,9 +1070,9 @@ Co-Authored-By: foozol <foozol@stravu.com>` : commitMessage;
     }
   }
 
-  async getOriginBranch(worktreePath: string, branch: string): Promise<string | null> {
+  async getOriginBranch(worktreePath: string, branch: string, wslContext?: WSLContext | null): Promise<string | null> {
     try {
-      await execWithShellPath(`git rev-parse --verify origin/${branch}`, { cwd: worktreePath });
+      await execForProject(`git rev-parse --verify origin/${branch}`, worktreePath, wslContext);
       return `origin/${branch}`;
     } catch {
       return null;

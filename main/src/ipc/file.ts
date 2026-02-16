@@ -5,6 +5,7 @@ import * as os from 'os';
 import { glob } from 'glob';
 import type { AppServices } from './types';
 import type { Session } from '../types/session';
+import { linuxToUNCPath, getWSLContextFromProject } from '../utils/wslUtils';
 
 interface FileReadRequest {
   sessionId: string;
@@ -58,13 +59,21 @@ export function registerFileHandlers(ipcMain: IpcMain, services: AppServices): v
         throw new Error(`Session not found: ${request.sessionId}`);
       }
 
+      // Get WSL context from project
+      const project = sessionManager.getProjectForSession(request.sessionId);
+      const wslContext = project ? getWSLContextFromProject(project) : null;
+
       // Ensure the file path is relative and safe
       const normalizedPath = path.normalize(request.filePath);
       if (normalizedPath.startsWith('..') || path.isAbsolute(normalizedPath)) {
         throw new Error('Invalid file path');
       }
 
-      const fullPath = path.join(session.worktreePath, normalizedPath);
+      const basePath = wslContext
+        ? linuxToUNCPath(session.worktreePath, wslContext.distribution)
+        : session.worktreePath;
+
+      const fullPath = path.join(basePath, normalizedPath);
       
       // Verify the file is within the worktree
       // First resolve the worktree path to handle symlinks
@@ -111,15 +120,19 @@ export function registerFileHandlers(ipcMain: IpcMain, services: AppServices): v
   ipcMain.handle('file:write', async (_, request: FileWriteRequest) => {
     try {
       // Removed verbose logging of file:write requests to reduce console noise during auto-save
-      
+
       if (!request.filePath) {
         throw new Error('File path is required');
       }
-      
+
       const session = sessionManager.getSession(request.sessionId);
       if (!session) {
         throw new Error(`Session not found: ${request.sessionId}`);
       }
+
+      // Get WSL context from project
+      const project = sessionManager.getProjectForSession(request.sessionId);
+      const wslContext = project ? getWSLContextFromProject(project) : null;
 
       // Note: mainBranch detection removed as it wasn't being used in this function
       // If needed in the future, use worktreeManager.detectMainBranch(session.worktreePath)
@@ -134,7 +147,11 @@ export function registerFileHandlers(ipcMain: IpcMain, services: AppServices): v
         throw new Error('Invalid file path');
       }
 
-      const fullPath = path.join(session.worktreePath, normalizedPath);
+      const basePath = wslContext
+        ? linuxToUNCPath(session.worktreePath, wslContext.distribution)
+        : session.worktreePath;
+
+      const fullPath = path.join(basePath, normalizedPath);
       
       // Verify the file is within the worktree
       const dirPath = path.dirname(fullPath);
@@ -196,13 +213,21 @@ export function registerFileHandlers(ipcMain: IpcMain, services: AppServices): v
         throw new Error(`Session not found: ${request.sessionId}`);
       }
 
+      // Get WSL context from project
+      const project = sessionManager.getProjectForSession(request.sessionId);
+      const wslContext = project ? getWSLContextFromProject(project) : null;
+
       // Ensure the file path is relative and safe
       const normalizedPath = path.normalize(request.filePath);
       if (normalizedPath.startsWith('..') || path.isAbsolute(normalizedPath)) {
         throw new Error('Invalid file path');
       }
 
-      const fullPath = path.join(session.worktreePath, normalizedPath);
+      const basePath = wslContext
+        ? linuxToUNCPath(session.worktreePath, wslContext.distribution)
+        : session.worktreePath;
+
+      const fullPath = path.join(basePath, normalizedPath);
       return { success: true, path: fullPath };
     } catch (error) {
       console.error('Error getting file path:', error);
@@ -440,7 +465,11 @@ Co-Authored-By: foozol <foozol@stravu.com>` : request.message;
       if (!session) {
         throw new Error(`Session not found: ${request.sessionId}`);
       }
-      
+
+      // Get WSL context from project
+      const project = sessionManager.getProjectForSession(request.sessionId);
+      const wslContext = project ? getWSLContextFromProject(project) : null;
+
       // Check if session is archived - worktree won't exist
       if (session.archived) {
         return { success: false, error: 'Cannot list files for archived session' };
@@ -448,7 +477,7 @@ Co-Authored-By: foozol <foozol@stravu.com>` : request.message;
 
       // Use the provided path or default to root
       const relativePath = request.path || '';
-      
+
       // Ensure the path is relative and safe
       if (relativePath) {
         const normalizedPath = path.normalize(relativePath);
@@ -457,7 +486,11 @@ Co-Authored-By: foozol <foozol@stravu.com>` : request.message;
         }
       }
 
-      const targetPath = relativePath ? path.join(session.worktreePath, relativePath) : session.worktreePath;
+      const basePath = wslContext
+        ? linuxToUNCPath(session.worktreePath, wslContext.distribution)
+        : session.worktreePath;
+
+      const targetPath = relativePath ? path.join(basePath, relativePath) : basePath;
       
       // Read directory contents
       const entries = await fs.readdir(targetPath, { withFileTypes: true });
@@ -516,13 +549,21 @@ Co-Authored-By: foozol <foozol@stravu.com>` : request.message;
         throw new Error(`Session not found: ${request.sessionId}`);
       }
 
+      // Get WSL context from project
+      const project = sessionManager.getProjectForSession(request.sessionId);
+      const wslContext = project ? getWSLContextFromProject(project) : null;
+
       // Ensure the file path is relative and safe
       const normalizedPath = path.normalize(request.filePath);
       if (normalizedPath.startsWith('..') || path.isAbsolute(normalizedPath)) {
         throw new Error('Invalid file path');
       }
 
-      const fullPath = path.join(session.worktreePath, normalizedPath);
+      const basePath = wslContext
+        ? linuxToUNCPath(session.worktreePath, wslContext.distribution)
+        : session.worktreePath;
+
+      const fullPath = path.join(basePath, normalizedPath);
       
       // Verify the file is within the worktree
       // First resolve the worktree path to handle symlinks
@@ -568,19 +609,27 @@ Co-Authored-By: foozol <foozol@stravu.com>` : request.message;
     try {
       // Determine the search directory
       let searchDirectory: string;
-      
+      let wslContext = null;
+
       if (request.sessionId) {
         const session = sessionManager.getSession(request.sessionId);
         if (!session) {
           throw new Error(`Session not found: ${request.sessionId}`);
         }
-        searchDirectory = session.worktreePath;
+        const project = sessionManager.getProjectForSession(request.sessionId);
+        wslContext = project ? getWSLContextFromProject(project) : null;
+        searchDirectory = wslContext
+          ? linuxToUNCPath(session.worktreePath, wslContext.distribution)
+          : session.worktreePath;
       } else if (request.projectId) {
         const project = databaseService.getProject(request.projectId);
         if (!project) {
           throw new Error(`Project not found: ${request.projectId}`);
         }
-        searchDirectory = project.path;
+        wslContext = getWSLContextFromProject(project);
+        searchDirectory = wslContext
+          ? linuxToUNCPath(project.path, wslContext.distribution)
+          : project.path;
       } else {
         throw new Error('Either sessionId or projectId must be provided');
       }

@@ -6,6 +6,7 @@ import { addSessionLog, cleanupSessionLogs } from '../../../ipc/logs';
 import { mainWindow } from '../../../index';
 import { getShellPath } from '../../../utils/shellPath';
 import type { AnalyticsManager } from '../../analyticsManager';
+import { WSLContext } from '../../../utils/wslUtils';
 
 export class LogsManager {
   private static instance: LogsManager;
@@ -89,19 +90,19 @@ export class LogsManager {
   /**
    * Run a script in the logs panel
    */
-  async runScript(sessionId: string, command: string, cwd: string): Promise<void> {
+  async runScript(sessionId: string, command: string, cwd: string, wslContext?: WSLContext | null): Promise<void> {
     // Get or create logs panel
     const panel = await this.getOrCreateLogsPanel(sessionId);
-    
+
     // Stop any existing process for this panel
     await this.stopScript(panel.id);
-    
+
     // Clear previous content
     await this.clearPanel(panel.id);
-    
+
     // Small delay to ensure frontend processes the clear event
     await new Promise(resolve => setTimeout(resolve, 50));
-    
+
     // Update panel state to running
     const startTime = new Date().toISOString();
 
@@ -122,10 +123,10 @@ export class LogsManager {
         } as LogsPanelState
       }
     });
-    
+
     // Make panel active
     await panelManager.setActivePanel(sessionId, panel.id);
-    
+
     // Emit process started event
     if (mainWindow) {
       mainWindow.webContents.send('panel:event', {
@@ -139,20 +140,27 @@ export class LogsManager {
         timestamp: startTime
       });
     }
-    
+
     // Get enhanced shell PATH for packaged apps
     const shellPath = getShellPath();
-    
+
     // Start process with shell
-    // We don't use exec wrapper as it can cause issues with complex scripts
-    const childProcess = spawn(command, [], {
-      cwd,
-      shell: true,
-      env: {
-        ...process.env,
-        PATH: shellPath
-      }
-    });
+    let childProcess: ChildProcess;
+
+    if (wslContext) {
+      childProcess = spawn('wsl.exe', ['-d', wslContext.distribution, '--cd', cwd, '--', 'bash', '-c', command], {
+        env: { ...process.env, PATH: shellPath }
+      });
+    } else {
+      childProcess = spawn(command, [], {
+        cwd,
+        shell: true,
+        env: {
+          ...process.env,
+          PATH: shellPath
+        }
+      });
+    }
     
     if (childProcess.pid) {
       // Store process reference
