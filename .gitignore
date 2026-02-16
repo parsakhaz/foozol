@@ -105,3 +105,8 @@ shared/*.js.map
 shared/*.d.ts
 shared/*.d.ts.map
 .claude/
+.context/
+
+# Debug logs from dev mode
+crystal-frontend-debug.log
+crystal-backend-debug.log
