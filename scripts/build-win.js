@@ -235,6 +235,74 @@ function downloadBetterSqlitePrebuilt() {
 }
 
 /**
+ * Install ARM64-specific native module prebuilts for cross-arch packaging.
+ *
+ * When building on x64, pnpm only installs x64 optional dependencies.
+ * For ARM64 builds, we need to manually install the ARM64 platform packages
+ * into the pnpm virtual store and create the appropriate symlinks so
+ * electron-builder includes them in the packaged app.
+ */
+function installArm64NativeModules() {
+  if (arch !== 'arm64' && arch !== 'both') return;
+
+  console.log('📥 Installing ARM64 native module prebuilts...');
+
+  const nodePtyVersion = '1.2.0-beta.3';
+  const pkgName = '@lydell/node-pty-win32-arm64';
+  const hoistedLink = path.join(NODE_MODULES, '@lydell', 'node-pty-win32-arm64');
+
+  if (fs.existsSync(hoistedLink)) {
+    console.log(`  ℹ️  ${pkgName} already installed`);
+    return;
+  }
+
+  console.log(`  📦 Installing ${pkgName}@${nodePtyVersion}...`);
+  const tmpDir = path.join(ROOT_DIR, 'tmp-arm64');
+
+  try {
+    // Download the tarball
+    fs.mkdirSync(tmpDir, { recursive: true });
+    const packDest = tmpDir.replace(/\\/g, '/');
+    execSync(
+      `npm pack ${pkgName}@${nodePtyVersion} --pack-destination "${packDest}"`,
+      { cwd: ROOT_DIR, stdio: 'pipe', shell: true }
+    );
+
+    const tarballs = fs.readdirSync(tmpDir).filter(f => f.endsWith('.tgz'));
+    if (tarballs.length === 0) {
+      throw new Error('No tarball downloaded');
+    }
+
+    // Extract into pnpm virtual store structure (mirroring the x64 layout)
+    const pnpmStoreDir = path.join(
+      NODE_MODULES, '.pnpm',
+      `@lydell+node-pty-win32-arm64@${nodePtyVersion}`,
+      'node_modules', '@lydell', 'node-pty-win32-arm64'
+    );
+    fs.mkdirSync(pnpmStoreDir, { recursive: true });
+
+    // Use relative paths for tar — git bash tar on Windows can't handle C: prefix
+    const tarballRel = path.relative(ROOT_DIR, path.join(tmpDir, tarballs[0])).replace(/\\/g, '/');
+    const extractToRel = path.relative(ROOT_DIR, pnpmStoreDir).replace(/\\/g, '/');
+    execSync(
+      `tar -xzf "${tarballRel}" -C "${extractToRel}" --strip-components=1`,
+      { cwd: ROOT_DIR, stdio: 'pipe', shell: true }
+    );
+
+    // Create hoisted symlink (junction on Windows, matching pnpm's structure)
+    fs.mkdirSync(path.join(NODE_MODULES, '@lydell'), { recursive: true });
+    fs.symlinkSync(pnpmStoreDir, hoistedLink, 'junction');
+
+    console.log(`  ✅ Installed ${pkgName}`);
+  } catch (error) {
+    console.error(`  ❌ Failed to install ARM64 node-pty: ${error.message}`);
+  } finally {
+    // Cleanup temp dir
+    fs.rmSync(tmpDir, { recursive: true, force: true });
+  }
+}
+
+/**
  * Main build process
  */
 async function build() {
@@ -242,6 +310,7 @@ async function build() {
   patchWinptyGyp();
   copyNodeAddonApi();
   downloadBetterSqlitePrebuilt();
+  installArm64NativeModules();
 
   console.log('\n🔧 Step 2: Building frontend...\n');
   run('pnpm run build:frontend');
