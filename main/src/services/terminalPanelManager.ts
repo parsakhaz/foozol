@@ -111,9 +111,34 @@ export class TerminalPanelManager {
 
     // Execute initial command if provided (e.g., "claude --dangerously-skip-permissions")
     if (initialCommand) {
+      let commandToRun = initialCommand;
+
+      // If this is a Claude CLI command, inject --session-id or --resume
+      if (
+        initialCommand.toLowerCase().includes('claude') &&
+        !initialCommand.includes('--session-id') &&
+        !initialCommand.includes('--resume')
+      ) {
+        const termState = existingState as TerminalPanelState | undefined;
+        if (termState?.hasClaudeSessionId) {
+          // Session ID was already used before — resume instead of creating new
+          commandToRun = `claude --resume ${panel.id} --dangerously-skip-permissions`;
+        } else {
+          // First time — create session with panel ID
+          commandToRun = `${initialCommand} --session-id ${panel.id}`;
+        }
+
+        // Mark that we've assigned a session ID to this panel
+        const updatedState = panel.state;
+        const cs = (updatedState.customState || {}) as TerminalPanelState;
+        cs.hasClaudeSessionId = true;
+        updatedState.customState = cs;
+        panelManager.updatePanel(panel.id, { state: updatedState });
+      }
+
       // Small delay to ensure shell is ready
       setTimeout(() => {
-        this.writeToTerminal(panel.id, initialCommand + '\r');
+        this.writeToTerminal(panel.id, commandToRun + '\r');
       }, 500);
     }
 
@@ -394,18 +419,64 @@ export class TerminalPanelManager {
     this.terminals.delete(panelId);
   }
   
+  /**
+   * Get all active terminal panel IDs.
+   */
+  getAllPanelIds(): string[] {
+    return Array.from(this.terminals.keys());
+  }
+
+  /**
+   * Send Ctrl+C to all running terminals (for graceful shutdown).
+   * Returns array of panel IDs that were signaled.
+   */
+  sendCtrlCToAll(): string[] {
+    const signaledPanels: string[] = [];
+
+    for (const [panelId, terminal] of this.terminals) {
+      try {
+        terminal.pty.write('\x03');
+        signaledPanels.push(panelId);
+        console.log(`[TerminalPanelManager] Sent Ctrl+C to terminal panel ${panelId}`);
+      } catch (error) {
+        console.error(`[TerminalPanelManager] Error sending Ctrl+C to terminal ${panelId}:`, error);
+      }
+    }
+
+    return signaledPanels;
+  }
+
+  /**
+   * Save state for all running terminals.
+   */
+  async saveAllTerminalStates(): Promise<void> {
+    for (const panelId of this.terminals.keys()) {
+      await this.saveTerminalState(panelId);
+    }
+  }
+
+  /**
+   * Get scrollback buffer for a specific terminal.
+   * Returns null if terminal not found.
+   */
+  getTerminalScrollback(panelId: string): string | null {
+    return this.terminals.get(panelId)?.scrollbackBuffer ?? null;
+  }
+
   destroyAllTerminals(): void {
     for (const [panelId, terminal] of this.terminals) {
       try {
+        // Save state before killing
+        this.saveTerminalState(panelId);
         terminal.pty.kill();
       } catch (error) {
         console.error(`[TerminalPanelManager] Error killing terminal ${panelId}:`, error);
       }
     }
-    
+
     this.terminals.clear();
   }
-  
+
   getActiveTerminals(): string[] {
     return Array.from(this.terminals.keys());
   }

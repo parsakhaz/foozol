@@ -17,7 +17,7 @@ class ClaudePanelHandler extends BaseAIPanelHandler {
   protected getInitialPanelState(): Partial<ClaudePanelState> {
     return {
       isInitialized: false,
-      claudeResumeId: undefined,
+      agentSessionId: undefined, // Use generic field instead of deprecated claudeResumeId
       autoContextRunState: 'idle',
       contextUsage: null
     };

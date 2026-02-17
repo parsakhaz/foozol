@@ -27,7 +27,7 @@ import { panelApi } from '../services/panelApi';
 import { PanelTabBar } from './panels/PanelTabBar';
 import { PanelContainer } from './panels/PanelContainer';
 import { SessionProvider } from '../contexts/SessionContext';
-import { ToolPanel, ToolPanelType } from '../../../shared/types/panels';
+import { ToolPanel, ToolPanelType, PANEL_CAPABILITIES } from '../../../shared/types/panels';
 import { PanelCreateOptions } from '../types/panelComponents';
 import { Download, Upload, GitMerge, Code2, Terminal, GripHorizontal, ChevronDown, ChevronUp, RefreshCw, Archive, ArchiveRestore, GitCommitHorizontal } from 'lucide-react';
 import type { Project } from '../types/project';
@@ -276,6 +276,22 @@ export const SessionView = memo(() => {
   useHotkey({ id: 'panel-tab-7', label: panelLabel(6), keys: 'alt+7', category: 'tabs', enabled: () => !!sortedSessionPanels[6], action: () => { const p = sortedSessionPanels[6]; if (p) handlePanelSelect(p); } });
   useHotkey({ id: 'panel-tab-8', label: panelLabel(7), keys: 'alt+8', category: 'tabs', enabled: () => !!sortedSessionPanels[7], action: () => { const p = sortedSessionPanels[7]; if (p) handlePanelSelect(p); } });
   useHotkey({ id: 'panel-tab-9', label: panelLabel(8), keys: 'alt+9', category: 'tabs', enabled: () => !!sortedSessionPanels[8], action: () => { const p = sortedSessionPanels[8]; if (p) handlePanelSelect(p); } });
+
+  // Ctrl+W: close active panel tab (skip permanent panels like diff)
+  useHotkey({
+    id: 'close-active-tab',
+    label: 'Close active tab',
+    keys: 'mod+w',
+    category: 'tabs',
+    enabled: () => {
+      if (!currentActivePanel) return false;
+      const caps = PANEL_CAPABILITIES[currentActivePanel.type];
+      return !caps?.permanent && !currentActivePanel.metadata?.permanent;
+    },
+    action: () => {
+      if (currentActivePanel) handlePanelClose(currentActivePanel);
+    },
+  });
 
   const handlePanelClose = useCallback(
     async (panel: ToolPanel) => {

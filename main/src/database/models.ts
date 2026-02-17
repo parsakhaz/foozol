@@ -45,7 +45,7 @@ export interface Session {
   initial_prompt: string;
   worktree_name: string;
   worktree_path: string;
-  status: "pending" | "running" | "stopped" | "completed" | "failed";
+  status: "pending" | "running" | "stopped" | "completed" | "failed" | "interrupted";
   status_message?: string;
   created_at: string;
   updated_at: string;

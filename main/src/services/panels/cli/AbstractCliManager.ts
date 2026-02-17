@@ -313,6 +313,27 @@ export abstract class AbstractCliManager extends EventEmitter {
   }
 
   /**
+   * Send Ctrl+C (\x03) to all running CLI processes for graceful shutdown.
+   * Does NOT kill or remove processes — just signals them to exit gracefully.
+   * Caller is responsible for waiting and then hard-killing if needed.
+   * @returns number of processes that were signaled
+   */
+  gracefulSignalAllProcesses(): number {
+    let count = 0;
+    for (const [panelId, cliProcess] of this.processes) {
+      try {
+        cliProcess.process.write('\x03');
+        this.logger?.info(`[${this.getCliToolName()}] Sent Ctrl+C to panel ${panelId} (session ${cliProcess.sessionId})`);
+        count++;
+      } catch (error) {
+        this.logger?.warn(`[${this.getCliToolName()}] Failed to send Ctrl+C to panel ${panelId}:`, error as Error);
+      }
+    }
+    this.logger?.info(`[${this.getCliToolName()}] Gracefully signaled ${count} processes`);
+    return count;
+  }
+
+  /**
    * Clear the CLI availability cache
    */
   clearAvailabilityCache(): void {

@@ -28,7 +28,7 @@ class CodexPanelHandler extends BaseAIPanelHandler {
   protected getInitialPanelState(): Partial<CodexPanelState> {
     return {
       isInitialized: false,
-      codexResumeId: undefined
+      agentSessionId: undefined // Use generic field instead of deprecated codexResumeId
     };
   }
 

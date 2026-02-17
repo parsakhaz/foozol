@@ -1780,9 +1780,9 @@ export class SessionManager extends EventEmitter {
       for (const panel of panels) {
         if (panel.type === 'terminal') {
           const termState = panel.state?.customState as TerminalPanelState | undefined;
-          const resumeId = termState?.terminalClaudeResumeId;
-          if (resumeId) {
-            resumablePanels.push({ panelId: panel.id, panelType: 'terminal', resumeId });
+          if (termState?.wasInterrupted && termState?.initialCommand) {
+            // Panel ID was used as --session-id when launching Claude, so it IS the resume ID
+            resumablePanels.push({ panelId: panel.id, panelType: 'terminal', resumeId: panel.id });
           }
         } else if (panel.type === 'claude') {
           const aiState = panel.state?.customState as BaseAIPanelState | undefined;
@@ -1807,6 +1807,7 @@ export class SessionManager extends EventEmitter {
   }
 
   async resumeInterruptedSessions(sessionIds: string[]): Promise<void> {
+    console.log(`[SessionManager] resumeInterruptedSessions called with ${sessionIds.length} session(s): ${sessionIds.join(', ')}`);
     const { terminalPanelManager } = await import('./terminalPanelManager');
 
     for (const sessionId of sessionIds) {
@@ -1818,20 +1819,18 @@ export class SessionManager extends EventEmitter {
 
       const worktreePath = dbSession.worktree_path;
       const panels = this.db.getPanelsForSession(sessionId);
+      console.log(`[SessionManager] Session ${sessionId} has ${panels.length} panel(s): ${panels.map(p => `${p.id} (${p.type})`).join(', ')}`);
       let resumedPanelCount = 0;
 
       for (const panel of panels) {
         if (panel.type === 'terminal') {
           const termState = panel.state?.customState as TerminalPanelState | undefined;
-          const resumeId = termState?.terminalClaudeResumeId;
 
-          if (resumeId) {
-            // Update initialCommand in panel state
+          if (termState?.wasInterrupted && termState?.initialCommand) {
+            // Panel ID was passed as --session-id on original launch, so use it as resume ID
             const state = panel.state;
             const customState = (state.customState || {}) as TerminalPanelState;
-            customState.initialCommand = `claude --resume ${resumeId}`;
-            // Clear the resume ID and interrupted flag since we're resuming
-            customState.terminalClaudeResumeId = undefined;
+            customState.initialCommand = `claude --resume ${panel.id} --dangerously-skip-permissions`;
             customState.wasInterrupted = undefined;
             state.customState = customState;
 
@@ -1842,7 +1841,7 @@ export class SessionManager extends EventEmitter {
             const reloadedPanel = this.db.getPanel(panel.id);
             if (reloadedPanel) {
               await terminalPanelManager.initializeTerminal(reloadedPanel, worktreePath);
-              console.log(`[SessionManager] Resumed terminal panel ${panel.id} with claude --resume ${resumeId}`);
+              console.log(`[SessionManager] Resumed terminal panel ${panel.id} with claude --resume ${panel.id}`);
               resumedPanelCount++;
             }
           }

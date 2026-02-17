@@ -448,10 +448,9 @@ export class CodexManager extends AbstractCliManager {
                 if (!customState.agentSessionId && !customState.codexSessionId) {
                   const updatedState = {
                     ...currentState,
-                    customState: { 
-                      ...customState, 
-                      agentSessionId: codexSessionId, // Use new generic field
-                      codexSessionId  // Keep legacy field for backward compatibility
+                    customState: {
+                      ...customState,
+                      agentSessionId: codexSessionId // Use new generic field (deprecated fields kept for read fallback only)
                     }
                   };
                   // Use panelManager to update so cache is properly updated
@@ -816,15 +815,14 @@ export class CodexManager extends AbstractCliManager {
                     return; // Don't overwrite existing session ID
                   }
                   
-                  const updatedState = { 
-                    ...currentState, 
-                    customState: { 
-                      ...customState, 
-                      agentSessionId: sessionId, // Use new generic field
-                      codexSessionId: sessionId  // Keep legacy field for backward compatibility
-                    } 
+                  const updatedState = {
+                    ...currentState,
+                    customState: {
+                      ...customState,
+                      agentSessionId: sessionId // Use new generic field (deprecated fields kept for read fallback only)
+                    }
                   };
-                  
+
                   this.logger?.info(`[session-id-debug] About to update panel state with: ${JSON.stringify(updatedState)}`);
                   // Use panelManager to update so cache is properly updated
                   await panelManager.updatePanel(panelId, { state: updatedState });
@@ -895,15 +893,14 @@ export class CodexManager extends AbstractCliManager {
                     return; // Don't overwrite existing session ID
                   }
                   
-                  const updatedState = { 
-                    ...currentState, 
-                    customState: { 
-                      ...customState, 
-                      agentSessionId: sessionId, // Use new generic field
-                      codexSessionId: sessionId  // Keep legacy field for backward compatibility
-                    } 
+                  const updatedState = {
+                    ...currentState,
+                    customState: {
+                      ...customState,
+                      agentSessionId: sessionId // Use new generic field (deprecated fields kept for read fallback only)
+                    }
                   };
-                  
+
                   this.logger?.info(`[session-id-debug] FALLBACK: About to update panel state with: ${JSON.stringify(updatedState)}`);
                   // Use panelManager to update so cache is properly updated
                   await panelManager.updatePanel(panelId, { state: updatedState });

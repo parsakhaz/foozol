@@ -137,6 +137,11 @@ interface ElectronAPI {
     
     // Large text operations
     saveLargeText: (sessionId: string, text: string) => Promise<string>;
+
+    // Resume session operations
+    getResumable: () => Promise<IPCResponse>;
+    resumeInterrupted: (sessionIds: string[]) => Promise<IPCResponse>;
+    dismissInterrupted: (sessionIds: string[]) => Promise<IPCResponse>;
   };
 
   // Project management

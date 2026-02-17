@@ -1899,4 +1899,39 @@ export function registerSessionHandlers(ipcMain: IpcMain, services: AppServices)
     }
   });
 
+  // Resume session handlers
+  ipcMain.handle('sessions:get-resumable', async () => {
+    try {
+      const activeProject = sessionManager.getActiveProject();
+      if (!activeProject) {
+        return { success: true, data: [] };
+      }
+      const resumable = sessionManager.getResumableSessions(activeProject.id);
+      return { success: true, data: resumable };
+    } catch (error) {
+      console.error('Failed to get resumable sessions:', error);
+      return { success: false, error: 'Failed to get resumable sessions' };
+    }
+  });
+
+  ipcMain.handle('sessions:resume-interrupted', async (_event, sessionIds: string[]) => {
+    try {
+      await sessionManager.resumeInterruptedSessions(sessionIds);
+      return { success: true };
+    } catch (error) {
+      console.error('Failed to resume interrupted sessions:', error);
+      return { success: false, error: 'Failed to resume interrupted sessions' };
+    }
+  });
+
+  ipcMain.handle('sessions:dismiss-interrupted', async (_event, sessionIds: string[]) => {
+    try {
+      await sessionManager.dismissInterruptedSessions(sessionIds);
+      return { success: true };
+    } catch (error) {
+      console.error('Failed to dismiss interrupted sessions:', error);
+      return { success: false, error: 'Failed to dismiss interrupted sessions' };
+    }
+  });
+
 } 

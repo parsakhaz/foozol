@@ -15,6 +15,7 @@ import { MainProcessLogger } from './components/MainProcessLogger';
 import { ErrorDialog } from './components/ErrorDialog';
 import { PermissionDialog } from './components/PermissionDialog';
 import { DiscordPopup } from './components/DiscordPopup';
+import { ResumeSessionsDialog } from './components/ResumeSessionsDialog';
 import { useErrorStore } from './stores/errorStore';
 import { useSessionStore } from './stores/sessionStore';
 import { useConfigStore } from './stores/configStore';
@@ -23,6 +24,7 @@ import { ContextMenuProvider } from './contexts/ContextMenuContext';
 import { TokenTest } from './components/TokenTest';
 import { CommandPalette } from './components/CommandPalette';
 import type { VersionUpdateInfo, PermissionInput } from './types/session';
+import type { ResumableSession } from '../../shared/types/panels';
 
 // Type for IPC response
 interface IPCResponse<T = unknown> {
@@ -53,6 +55,8 @@ function App() {
   const [isPromptHistoryOpen, setIsPromptHistoryOpen] = useState(false);
   const [isTokenTestOpen, setIsTokenTestOpen] = useState(false);
   const [isCommandPaletteOpen, setIsCommandPaletteOpen] = useState(false);
+  const [resumableSessions, setResumableSessions] = useState<ResumableSession[]>([]);
+  const [isResumeDialogOpen, setIsResumeDialogOpen] = useState(false);
   const { currentError, clearError } = useErrorStore();
   const { sessions, isLoaded } = useSessionStore();
   const { fetchConfig } = useConfigStore();
@@ -285,16 +289,35 @@ function App() {
   }, [isLoaded, isAnalyticsConsentOpen]); // Also wait for analytics consent dialog to close
 
   // Discord popup logic is now combined with welcome screen logic above
-  
+
+  // Check for resumable sessions on startup (auto-resume feature)
+  useEffect(() => {
+    if (!isLoaded || isAnalyticsConsentOpen) return;
+
+    const checkResumableSessions = async () => {
+      try {
+        const result = await window.electronAPI.sessions.getResumable();
+        if (result.success && result.data && Array.isArray(result.data) && result.data.length > 0) {
+          setResumableSessions(result.data as ResumableSession[]);
+          setIsResumeDialogOpen(true);
+        }
+      } catch (error) {
+        console.error('[App] Failed to check for resumable sessions:', error);
+      }
+    };
+
+    checkResumableSessions();
+  }, [isLoaded, isAnalyticsConsentOpen]);
+
   useEffect(() => {
     // Set up permission request listener
     const handlePermissionRequest = (...args: unknown[]) => {
       const request = args[0] as PermissionRequest;
       setCurrentPermissionRequest(request);
     };
-    
+
     window.electron?.on('permission:request', handlePermissionRequest);
-    
+
     return () => {
       window.electron?.off('permission:request', handlePermissionRequest);
     };
@@ -378,9 +401,14 @@ function App() {
           onRespond={handlePermissionResponse}
           session={currentPermissionRequest ? sessions.find(s => s.id === currentPermissionRequest.sessionId) : undefined}
         />
-        <DiscordPopup 
-          isOpen={isDiscordOpen} 
-          onClose={() => setIsDiscordOpen(false)} 
+        <DiscordPopup
+          isOpen={isDiscordOpen}
+          onClose={() => setIsDiscordOpen(false)}
+        />
+        <ResumeSessionsDialog
+          isOpen={isResumeDialogOpen}
+          onClose={() => setIsResumeDialogOpen(false)}
+          sessions={resumableSessions}
         />
         <PromptHistoryModal
           isOpen={isPromptHistoryOpen}

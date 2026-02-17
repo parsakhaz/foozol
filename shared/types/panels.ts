@@ -36,6 +36,10 @@ export interface TerminalPanelState {
   // Advanced persistence options
   tmuxSessionId?: string;        // For true session persistence via tmux
   outputSizeLimit?: number;      // Max lines to persist (default: 10000)
+
+  // Auto-resume state (for graceful shutdown/restart)
+  wasInterrupted?: boolean;          // Whether this terminal was active when app shutdown occurred
+  hasClaudeSessionId?: boolean;      // Whether --session-id was already passed to Claude (use --resume next time)
 }
 
 export interface DiffPanelState {
@@ -52,7 +56,7 @@ export interface DiffPanelState {
 }
 
 // Panel status type - mirrors session status but at panel level
-export type PanelStatus = 'idle' | 'running' | 'waiting' | 'stopped' | 'completed_unviewed' | 'error';
+export type PanelStatus = 'idle' | 'running' | 'waiting' | 'stopped' | 'completed_unviewed' | 'error' | 'interrupted';
 
 // Base interface for AI panel states (Claude, Codex, etc.)
 export interface BaseAIPanelState {
@@ -71,10 +75,14 @@ export interface BaseAIPanelState {
   agentSessionId?: string;        // The AI agent's session ID for resuming conversations
 
   // Legacy fields for backward compatibility (will be migrated to agentSessionId)
-  claudeSessionId?: string;       // Deprecated: Use agentSessionId instead
-  codexSessionId?: string;        // Deprecated: Use agentSessionId instead
-  claudeResumeId?: string;        // Deprecated: Claude's old resume ID
-  codexResumeId?: string;         // Deprecated: Codex's old resume ID
+  /** @deprecated Use agentSessionId instead */
+  claudeSessionId?: string;
+  /** @deprecated Use agentSessionId instead */
+  codexSessionId?: string;
+  /** @deprecated Use agentSessionId instead */
+  claudeResumeId?: string;
+  /** @deprecated Use agentSessionId instead */
+  codexResumeId?: string;
 }
 
 export interface ClaudePanelState extends BaseAIPanelState {
@@ -168,6 +176,17 @@ export interface CreatePanelRequest {
 export interface UpdatePanelRequest {
   panelId: string;
   updates: Partial<ToolPanel>;
+}
+
+// Type for resumable sessions after graceful shutdown
+export interface ResumableSession {
+  sessionId: string;
+  sessionName: string;
+  panels: Array<{
+    panelId: string;
+    panelType: 'terminal' | 'claude';
+    resumeId: string;
+  }>;
 }
 
 // Panel Event System Types

@@ -141,6 +141,23 @@ export class CliManagerFactory {
   }
 
   /**
+   * Gracefully signal all CLI processes across all managers.
+   * Sends Ctrl+C to all running processes without killing them.
+   * Returns the total number of processes signaled.
+   */
+  public gracefulSignalAllProcesses(): number {
+    let totalCount = 0;
+    const managers = this.registry.getAllManagers();
+
+    for (const manager of managers) {
+      totalCount += manager.gracefulSignalAllProcesses();
+    }
+
+    this.logger?.info(`[CliManagerFactory] Gracefully signaled ${totalCount} total processes across all CLI managers`);
+    return totalCount;
+  }
+
+  /**
    * Shutdown all managers
    */
   public async shutdown(): Promise<void> {
