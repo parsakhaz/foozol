@@ -100,6 +100,30 @@ export const TerminalPanel: React.FC<TerminalPanelProps> = React.memo(({ panel, 
         terminal.loadAddon(fitAddon);
         console.log('[TerminalPanel] FitAddon loaded');
 
+        // Intercept app-level shortcuts before xterm consumes them
+        terminal.attachCustomKeyEventHandler((e: KeyboardEvent) => {
+          const ctrlOrMeta = e.ctrlKey || e.metaKey;
+
+          // Ctrl/Cmd+1-9: switch sessions
+          if (ctrlOrMeta && e.key >= '1' && e.key <= '9') return false;
+          // Alt+1-9: switch panel tabs
+          if (e.altKey && e.key >= '1' && e.key <= '9') return false;
+          // Ctrl/Cmd+W: close active tab
+          if (ctrlOrMeta && e.key.toLowerCase() === 'w') return false;
+          // Ctrl/Cmd+K: command palette
+          if (ctrlOrMeta && e.key.toLowerCase() === 'k') return false;
+          // Ctrl/Cmd+P: prompt history
+          if (ctrlOrMeta && e.key.toLowerCase() === 'p') return false;
+          // Ctrl/Cmd+Shift+N: new session
+          if (ctrlOrMeta && e.shiftKey && e.key.toLowerCase() === 'n') return false;
+          // Ctrl/Cmd+Shift+D: toggle diff
+          if (ctrlOrMeta && e.shiftKey && e.key.toLowerCase() === 'd') return false;
+          // Ctrl/Cmd+Shift+R: toggle run
+          if (ctrlOrMeta && e.shiftKey && e.key.toLowerCase() === 'r') return false;
+
+          return true; // Let terminal handle everything else
+        });
+
         // FIX: Additional check before DOM manipulation
         if (terminalRef.current && !disposed) {
           console.log('[TerminalPanel] Opening terminal in DOM element:', terminalRef.current);

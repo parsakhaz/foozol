@@ -166,6 +166,13 @@ async function createWindow() {
   // Each panel can register multiple event listeners
   mainWindow.webContents.setMaxListeners(100);
 
+  // Prevent Ctrl+W from closing the Electron window so the renderer can use it to close tabs
+  mainWindow.webContents.on('before-input-event', (event, input) => {
+    if ((input.control || input.meta) && input.key.toLowerCase() === 'w') {
+      event.preventDefault();
+    }
+  });
+
   if (isDevelopment) {
     await mainWindow.loadURL('http://localhost:4521');
     mainWindow.webContents.openDevTools();
