@@ -8,6 +8,9 @@ if (process.platform === 'linux') {
   app.commandLine.appendSwitch('gtk-version', '3');
 }
 
+// Force integrated GPU for better battery life on dual-GPU systems
+app.commandLine.appendSwitch('force_discrete_gpu', '0');
+
 // Now import the rest of electron
 import { BrowserWindow, ipcMain, shell, dialog, IpcMainInvokeEvent } from 'electron';
 import * as path from 'path';

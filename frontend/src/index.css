@@ -8,6 +8,14 @@
 @tailwind components;
 @tailwind utilities;
 
+/* Pause all animations when window is hidden to save battery */
+html.window-hidden *,
+html.window-hidden *::before,
+html.window-hidden *::after {
+  animation-play-state: paused !important;
+  transition: none !important;
+}
+
 /* Ensure proper overflow handling */
 html, body, #root {
   height: 100%;

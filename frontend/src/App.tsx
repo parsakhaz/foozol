@@ -20,6 +20,7 @@ import { useErrorStore } from './stores/errorStore';
 import { useSessionStore } from './stores/sessionStore';
 import { useConfigStore } from './stores/configStore';
 import { API } from './utils/api';
+import { createVisibilityAwareInterval } from './utils/performanceUtils';
 import { ContextMenuProvider } from './contexts/ContextMenuContext';
 import { TokenTest } from './components/TokenTest';
 import { CommandPalette } from './components/CommandPalette';
@@ -142,42 +143,30 @@ function App() {
     checkAnalyticsConsent();
   }, [hasCheckedAnalyticsConsent]);
 
-  // CRITICAL PERFORMANCE FIX: Very aggressive cleanup to prevent V8 array iteration issues
+  // CRITICAL PERFORMANCE FIX: Cleanup to prevent V8 array iteration issues
+  // Uses visibility-aware interval: 60s when active, 600s when hidden
   useEffect(() => {
-    // Run cleanup every 30 seconds to prevent array buildup that causes CPU spikes
-    const cleanupInterval = setInterval(() => {
+    const runCleanup = () => {
       const store = useSessionStore.getState();
-      // Always cleanup when we have multiple sessions to prevent memory issues
       if (store.sessions.length > 0) {
         store.cleanupInactiveSessions();
       }
-    }, 30 * 1000); // 30 seconds - much more frequent to prevent V8 optimization failures
-    
+    };
+
+    const cleanupDispose = createVisibilityAwareInterval(runCleanup, 60 * 1000);
+
     // Immediate cleanup when switching sessions
-    const handleSessionSwitch = () => {
-      // Immediate cleanup to free memory right away
-      const store = useSessionStore.getState();
-      if (store.sessions.length > 0) {
-        store.cleanupInactiveSessions();
-      }
-    };
-    
+    const handleSessionSwitch = () => runCleanup();
     window.addEventListener('session-switched', handleSessionSwitch);
-    
-    // Also cleanup on visibility change to free memory when app is in background
+
+    // Pause animations when window is hidden to save battery
     const handleVisibilityChange = () => {
-      if (document.hidden) {
-        const store = useSessionStore.getState();
-        if (store.sessions.length > 0) {
-          store.cleanupInactiveSessions();
-        }
-      }
+      document.documentElement.classList.toggle('window-hidden', document.hidden);
     };
-    
     document.addEventListener('visibilitychange', handleVisibilityChange);
-    
+
     return () => {
-      clearInterval(cleanupInterval);
+      cleanupDispose();
       window.removeEventListener('session-switched', handleSessionSwitch);
       document.removeEventListener('visibilitychange', handleVisibilityChange);
     };
