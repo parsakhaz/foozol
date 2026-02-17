@@ -1,11 +1,13 @@
 import React, { useRef, useEffect, useState } from 'react';
 import { Terminal } from '@xterm/xterm';
 import { FitAddon } from '@xterm/addon-fit';
+import type { WebglAddon } from '@xterm/addon-webgl';
 import { useSession } from '../../contexts/SessionContext';
 import { useTheme } from '../../contexts/ThemeContext';
 import { TerminalPanelProps } from '../../types/panelComponents';
 import { renderLog, devLog } from '../../utils/console';
 import { getTerminalTheme } from '../../utils/terminalTheme';
+import { throttle } from '../../utils/performanceUtils';
 import '@xterm/xterm/css/xterm.css';
 
 // Type for terminal state restoration
@@ -22,6 +24,7 @@ export const TerminalPanel: React.FC<TerminalPanelProps> = React.memo(({ panel, 
   const terminalRef = useRef<HTMLDivElement>(null);
   const xtermRef = useRef<Terminal | null>(null);
   const fitAddonRef = useRef<FitAddon | null>(null);
+  const webglAddonRef = useRef<WebglAddon | null>(null);
   const [isInitialized, setIsInitialized] = useState(false);
   const [initError, setInitError] = useState<string | null>(null);
   
@@ -92,7 +95,7 @@ export const TerminalPanel: React.FC<TerminalPanelProps> = React.memo(({ panel, 
           fontSize: 14,
           fontFamily: 'Menlo, Monaco, "Courier New", monospace',
           theme: getTerminalTheme(),
-          scrollback: 50000
+          scrollback: 10000
         });
         console.log('[TerminalPanel] XTerm instance created:', !!terminal);
 
@@ -133,8 +136,45 @@ export const TerminalPanel: React.FC<TerminalPanelProps> = React.memo(({ panel, 
           console.log('[TerminalPanel] FitAddon fitted');
           terminal.options.theme = getTerminalTheme();
 
+          // Try loading WebGL renderer for GPU-accelerated rendering
+          try {
+            const { WebglAddon: WebglAddonImpl } = await import('@xterm/addon-webgl');
+            if (!disposed) {
+              const addon = new WebglAddonImpl();
+              addon.onContextLoss(() => {
+                console.warn('[TerminalPanel] WebGL context lost for panel', panel.id, ', falling back to DOM renderer');
+                try { addon.dispose(); } catch { /* already disposed */ }
+                webglAddonRef.current = null;
+              });
+              terminal.loadAddon(addon);
+              webglAddonRef.current = addon;
+              console.log('[TerminalPanel] WebGL renderer loaded for panel', panel.id);
+            }
+          } catch (e) {
+            console.warn('[TerminalPanel] WebGL renderer failed for panel', panel.id, ', using DOM renderer:', e);
+            webglAddonRef.current = null;
+          }
+
           xtermRef.current = terminal;
           fitAddonRef.current = fitAddon;
+
+          // Ack batching for flow control
+          const ACK_BATCH_SIZE = 10_000; // 10KB
+          const ACK_BATCH_INTERVAL = 100; // ms
+          let pendingAckBytes = 0;
+          let ackFlushTimer: ReturnType<typeof setTimeout> | null = null;
+
+          const flushAck = () => {
+            if (ackFlushTimer) {
+              clearTimeout(ackFlushTimer);
+              ackFlushTimer = null;
+            }
+            if (pendingAckBytes > 0) {
+              const bytes = pendingAckBytes;
+              pendingAckBytes = 0;
+              window.electronAPI.invoke('terminal:ack', panel.id, bytes);
+            }
+          };
 
           // Restore scrollback if we have saved state FOR THIS PANEL
           if (terminalStateForThisPanel && terminalStateForThisPanel.scrollbackBuffer) {
@@ -166,7 +206,15 @@ export const TerminalPanel: React.FC<TerminalPanelProps> = React.memo(({ panel, 
               console.log('[TerminalPanel] Received panel output for:', typedData.panelId, 'Current panel:', panel.id);
               if (typedData.panelId === panel.id && terminal && !disposed) {
                 console.log('[TerminalPanel] Writing to terminal:', typedData.output.substring(0, 50) + '...');
-                terminal.write(typedData.output);
+                terminal.write(typedData.output, () => {
+                  // Batch ack bytes for flow control
+                  pendingAckBytes += typedData.output.length;
+                  if (pendingAckBytes >= ACK_BATCH_SIZE) {
+                    flushAck();
+                  } else if (!ackFlushTimer) {
+                    ackFlushTimer = setTimeout(flushAck, ACK_BATCH_INTERVAL);
+                  }
+                });
               }
             }
             // Ignore session terminal output (has sessionId instead of panelId)
@@ -181,7 +229,8 @@ export const TerminalPanel: React.FC<TerminalPanelProps> = React.memo(({ panel, 
           });
 
           // Handle resize
-          const resizeObserver = new ResizeObserver(() => {
+          // Throttle resize to avoid excessive fit() calls during window resize
+          const throttledResize = throttle(() => {
             if (fitAddon && !disposed) {
               fitAddon.fit();
               const dimensions = fitAddon.proposeDimensions();
@@ -189,13 +238,19 @@ export const TerminalPanel: React.FC<TerminalPanelProps> = React.memo(({ panel, 
                 window.electronAPI.invoke('terminal:resize', panel.id, dimensions.cols, dimensions.rows);
               }
             }
+          }, 100);
+
+          const resizeObserver = new ResizeObserver(() => {
+            throttledResize();
           });
-          
+
           resizeObserver.observe(terminalRef.current);
 
           // FIX: Return comprehensive cleanup function
           return () => {
             disposed = true;
+            flushAck();
+            if (ackFlushTimer) clearTimeout(ackFlushTimer);
             resizeObserver.disconnect();
             unsubscribeOutput(); // Use the unsubscribe function
             inputDisposable.dispose();
@@ -216,7 +271,13 @@ export const TerminalPanel: React.FC<TerminalPanelProps> = React.memo(({ panel, 
       
       // Clean up async initialization
       cleanupPromise.then(cleanupFn => cleanupFn?.());
-      
+
+      // Dispose WebGL addon
+      if (webglAddonRef.current) {
+        try { webglAddonRef.current.dispose(); } catch { /* ignore */ }
+        webglAddonRef.current = null;
+      }
+
       // Dispose XTerm instance only on final unmount
       if (xtermRef.current) {
         try {

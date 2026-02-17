@@ -300,6 +300,10 @@ export function registerPanelHandlers(ipcMain: IpcMain, services: AppServices) {
     return terminalPanelManager.saveTerminalState(panelId);
   });
 
+  ipcMain.handle('terminal:ack', async (_, panelId: string, bytesConsumed: number) => {
+    terminalPanelManager.acknowledgeBytes(panelId, bytesConsumed);
+  });
+
   // Check if a panel type should be auto-created (not previously closed by user)
   ipcMain.handle('panels:shouldAutoCreate', async (_, sessionId: string, panelType: string) => {
     return panelManager.shouldAutoCreatePanel(sessionId, panelType);

@@ -9,6 +9,11 @@ import { ShellDetector } from '../utils/shellDetector';
 import type { AnalyticsManager } from './analyticsManager';
 import { getWSLShellSpawn, WSLContext } from '../utils/wslUtils';
 
+const HIGH_WATERMARK = 100_000; // 100KB — pause PTY when pending exceeds this
+const LOW_WATERMARK = 10_000;   // 10KB — resume PTY when pending drops below this
+const OUTPUT_BATCH_INTERVAL = 16; // ms (~60fps)
+const OUTPUT_BATCH_SIZE = 4096;   // 4KB — flush immediately if buffer exceeds this
+
 interface TerminalProcess {
   pty: pty.IPty;
   panelId: string;
@@ -18,6 +23,12 @@ interface TerminalProcess {
   currentCommand: string;
   lastActivity: Date;
   isWSL?: boolean;
+  // Flow control
+  pendingBytes: number;
+  isPaused: boolean;
+  // Output batching
+  outputBuffer: string;
+  outputFlushTimer: ReturnType<typeof setTimeout> | null;
 }
 
 export class TerminalPanelManager {
@@ -27,6 +38,48 @@ export class TerminalPanelManager {
 
   setAnalyticsManager(analyticsManager: AnalyticsManager): void {
     this.analyticsManager = analyticsManager;
+  }
+
+  private flushOutputBuffer(terminal: TerminalProcess): void {
+    if (terminal.outputFlushTimer) {
+      clearTimeout(terminal.outputFlushTimer);
+      terminal.outputFlushTimer = null;
+    }
+
+    if (!terminal.outputBuffer) return;
+
+    const data = terminal.outputBuffer;
+    terminal.outputBuffer = '';
+
+    // Track pending bytes for flow control
+    terminal.pendingBytes += data.length;
+
+    // Send batched output to renderer
+    if (mainWindow) {
+      mainWindow.webContents.send('terminal:output', {
+        sessionId: terminal.sessionId,
+        panelId: terminal.panelId,
+        output: data
+      });
+    }
+
+    // Apply backpressure if watermark exceeded
+    if (terminal.pendingBytes > HIGH_WATERMARK && !terminal.isPaused) {
+      terminal.isPaused = true;
+      terminal.pty.pause();
+    }
+  }
+
+  acknowledgeBytes(panelId: string, bytesConsumed: number): void {
+    const terminal = this.terminals.get(panelId);
+    if (!terminal) return;
+
+    terminal.pendingBytes = Math.max(0, terminal.pendingBytes - bytesConsumed);
+
+    if (terminal.isPaused && terminal.pendingBytes < LOW_WATERMARK) {
+      terminal.isPaused = false;
+      terminal.pty.resume();
+    }
   }
 
   async initializeTerminal(panel: ToolPanel, cwd: string, wslContext?: WSLContext | null): Promise<void> {
@@ -80,7 +133,11 @@ export class TerminalPanelManager {
       commandHistory: [],
       currentCommand: '',
       lastActivity: new Date(),
-      isWSL: !!(wslContext && process.platform === 'win32')
+      isWSL: !!(wslContext && process.platform === 'win32'),
+      pendingBytes: 0,
+      isPaused: false,
+      outputBuffer: '',
+      outputFlushTimer: null
     };
     
     // Store in map
@@ -187,13 +244,17 @@ export class TerminalPanelManager {
         terminal.currentCommand += data;
       }
       
-      // Send output to frontend
-      if (mainWindow) {
-        mainWindow.webContents.send('terminal:output', {
-          sessionId: terminal.sessionId,
-          panelId: terminal.panelId,
-          output: data
-        });
+      // Buffer output for batching instead of sending immediately
+      terminal.outputBuffer += data;
+
+      if (terminal.outputBuffer.length >= OUTPUT_BATCH_SIZE) {
+        // Buffer is large enough — flush immediately
+        this.flushOutputBuffer(terminal);
+      } else if (!terminal.outputFlushTimer) {
+        // Schedule flush for next frame
+        terminal.outputFlushTimer = setTimeout(() => {
+          this.flushOutputBuffer(terminal);
+        }, OUTPUT_BATCH_INTERVAL);
       }
     });
     
@@ -400,6 +461,13 @@ export class TerminalPanelManager {
     // Save state before destroying
     this.saveTerminalState(panelId);
 
+    // Flush any remaining buffered output
+    if (terminal.outputFlushTimer) {
+      clearTimeout(terminal.outputFlushTimer);
+      terminal.outputFlushTimer = null;
+    }
+    this.flushOutputBuffer(terminal);
+
     // Kill the PTY process
     try {
       if (terminal.isWSL) {
@@ -468,6 +536,14 @@ export class TerminalPanelManager {
       try {
         // Save state before killing
         this.saveTerminalState(panelId);
+
+        // Flush buffered output
+        if (terminal.outputFlushTimer) {
+          clearTimeout(terminal.outputFlushTimer);
+          terminal.outputFlushTimer = null;
+        }
+        this.flushOutputBuffer(terminal);
+
         terminal.pty.kill();
       } catch (error) {
         console.error(`[TerminalPanelManager] Error killing terminal ${panelId}:`, error);
