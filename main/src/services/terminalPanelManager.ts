@@ -13,6 +13,7 @@ const HIGH_WATERMARK = 100_000; // 100KB — pause PTY when pending exceeds this
 const LOW_WATERMARK = 10_000;   // 10KB — resume PTY when pending drops below this
 const OUTPUT_BATCH_INTERVAL = 16; // ms (~60fps)
 const OUTPUT_BATCH_SIZE = 4096;   // 4KB — flush immediately if buffer exceeds this
+const PAUSE_SAFETY_TIMEOUT = 5_000; // 5s — auto-resume PTY if no acks arrive (prevents permanent stall)
 
 interface TerminalProcess {
   pty: pty.IPty;
@@ -26,6 +27,7 @@ interface TerminalProcess {
   // Flow control
   pendingBytes: number;
   isPaused: boolean;
+  pauseSafetyTimer: ReturnType<typeof setTimeout> | null;
   // Output batching
   outputBuffer: string;
   outputFlushTimer: ReturnType<typeof setTimeout> | null;
@@ -67,6 +69,17 @@ export class TerminalPanelManager {
     if (terminal.pendingBytes > HIGH_WATERMARK && !terminal.isPaused) {
       terminal.isPaused = true;
       terminal.pty.pause();
+
+      // Safety valve: auto-resume if no acks arrive (e.g., renderer unmounted)
+      if (terminal.pauseSafetyTimer) clearTimeout(terminal.pauseSafetyTimer);
+      terminal.pauseSafetyTimer = setTimeout(() => {
+        if (terminal.isPaused) {
+          terminal.isPaused = false;
+          terminal.pendingBytes = 0;
+          terminal.pty.resume();
+        }
+        terminal.pauseSafetyTimer = null;
+      }, PAUSE_SAFETY_TIMEOUT);
     }
   }
 
@@ -79,6 +92,11 @@ export class TerminalPanelManager {
     if (terminal.isPaused && terminal.pendingBytes < LOW_WATERMARK) {
       terminal.isPaused = false;
       terminal.pty.resume();
+      // Cancel safety timer — normal ack flow is working
+      if (terminal.pauseSafetyTimer) {
+        clearTimeout(terminal.pauseSafetyTimer);
+        terminal.pauseSafetyTimer = null;
+      }
     }
   }
 
@@ -136,6 +154,7 @@ export class TerminalPanelManager {
       isWSL: !!(wslContext && process.platform === 'win32'),
       pendingBytes: 0,
       isPaused: false,
+      pauseSafetyTimer: null,
       outputBuffer: '',
       outputFlushTimer: null
     };
@@ -461,10 +480,14 @@ export class TerminalPanelManager {
     // Save state before destroying
     this.saveTerminalState(panelId);
 
-    // Flush any remaining buffered output
+    // Clear timers
     if (terminal.outputFlushTimer) {
       clearTimeout(terminal.outputFlushTimer);
       terminal.outputFlushTimer = null;
+    }
+    if (terminal.pauseSafetyTimer) {
+      clearTimeout(terminal.pauseSafetyTimer);
+      terminal.pauseSafetyTimer = null;
     }
     this.flushOutputBuffer(terminal);
 
@@ -537,10 +560,14 @@ export class TerminalPanelManager {
         // Save state before killing
         this.saveTerminalState(panelId);
 
-        // Flush buffered output
+        // Clear timers
         if (terminal.outputFlushTimer) {
           clearTimeout(terminal.outputFlushTimer);
           terminal.outputFlushTimer = null;
+        }
+        if (terminal.pauseSafetyTimer) {
+          clearTimeout(terminal.pauseSafetyTimer);
+          terminal.pauseSafetyTimer = null;
         }
         this.flushOutputBuffer(terminal);
 
