@@ -23,17 +23,16 @@ Create scripts/foozol-run-script.js (Node.js, cross-platform) that:
 4. Auto-detects if deps need installing (package.json mtime > node_modules mtime)
 5. Auto-detects if build is stale (src mtime > dist mtime)
 6. Clean Ctrl+C termination (taskkill on Windows, SIGTERM on Unix)
-7. Update package.json "dev" script to use this
+7. Update package.json 'dev' script to use this
 
 Pseudocode reference:
-\`\`\`
 findGitRoot(dir):
   if .git exists in dir: return dir
   else: recurse to parent
 
 isWorktree(projectRoot):
-  if .git is a FILE (not dir): it's a worktree
-  parse "gitdir: path" to find main repo
+  if .git is a FILE (not dir): this is a worktree
+  parse 'gitdir: path' to find main repo
 
 calculatePort(dirPath):
   hash = md5(dirPath)
@@ -53,17 +52,16 @@ main():
   worktree = isWorktree(root)
   port = calculatePort(root)
   if !checkPortAvailable(port): port = findNextAvailable(port)
-  if needsInstall(root): run "pnpm install"
-  if needsBuild(root): run "pnpm build:main"
+  if needsInstall(root): run 'pnpm install'
+  if needsBuild(root): run 'pnpm build:main'
   spawn dev server with PORT env var
   handle SIGINT/SIGTERM for clean shutdown
-\`\`\`
 
 Analyze this project and create the complete foozol-run-script.js.
 
 IMPORTANT: After creating the script, commit it and merge to main so all future worktrees have it:
 1. git add scripts/foozol-run-script.js
-2. git commit -m "feat: Add foozol-run-script.js for intelligent dev server"
+2. git commit -m 'feat: Add foozol-run-script.js for intelligent dev server'
 3. git checkout main && git merge <current-branch> --no-edit
 4. git checkout <current-branch> && git rebase main`;
 
@@ -474,7 +472,7 @@ export const PanelTabBar: React.FC<PanelTabBarProps> = memo(({
                 <button
                   className="flex items-center w-full px-4 py-2 text-sm text-text-secondary transition-colors hover:bg-surface-hover hover:text-text-primary text-left"
                   onClick={() => handleAddPanel('terminal', {
-                    initialCommand: `claude --dangerously-skip-permissions --prompt "${SETUP_RUN_SCRIPT_PROMPT.replace(/"/g, '\\"').replace(/\n/g, '\\n')}"`,
+                    initialCommand: `claude --dangerously-skip-permissions "${SETUP_RUN_SCRIPT_PROMPT.replace(/\n/g, ' ')}"`,
                     title: 'Setup Run Script'
                   })}
                 >
@@ -567,7 +565,7 @@ export const PanelTabBar: React.FC<PanelTabBarProps> = memo(({
         {session && (
           <Tooltip content="Run Dev Server" side="bottom">
             <button
-              className="h-9 px-2 text-text-tertiary hover:text-status-success hover:bg-surface-hover transition-colors flex-shrink-0"
+              className="inline-flex items-center h-9 px-2 text-text-tertiary hover:text-status-success hover:bg-surface-hover transition-colors flex-shrink-0"
               onClick={async () => {
                 // Check if foozol-run-script.js exists in this session's worktree
                 const scriptExists = await window.electronAPI?.invoke('file:exists', {
@@ -584,7 +582,7 @@ export const PanelTabBar: React.FC<PanelTabBarProps> = memo(({
                 } else {
                   // Script doesn't exist - trigger Claude to create it
                   handleAddPanel('terminal', {
-                    initialCommand: `claude --dangerously-skip-permissions --prompt "${SETUP_RUN_SCRIPT_PROMPT.replace(/"/g, '\\"').replace(/\n/g, '\\n')}"`,
+                    initialCommand: `claude --dangerously-skip-permissions "${SETUP_RUN_SCRIPT_PROMPT.replace(/\n/g, ' ')}"`,
                     title: 'Setup Run Script'
                   });
                 }
