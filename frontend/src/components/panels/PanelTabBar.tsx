@@ -59,7 +59,13 @@ main():
   handle SIGINT/SIGTERM for clean shutdown
 \`\`\`
 
-Analyze this project and create the complete foozol-run-script.js.`;
+Analyze this project and create the complete foozol-run-script.js.
+
+IMPORTANT: After creating the script, commit it and merge to main so all future worktrees have it:
+1. git add scripts/foozol-run-script.js
+2. git commit -m "feat: Add foozol-run-script.js for intelligent dev server"
+3. git checkout main && git merge <current-branch> --no-edit
+4. git checkout <current-branch> && git rebase main`;
 
 export const PanelTabBar: React.FC<PanelTabBarProps> = memo(({
   panels,
