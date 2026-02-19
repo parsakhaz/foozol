@@ -16,21 +16,89 @@ import { Tooltip } from '../ui/Tooltip';
 const SETUP_RUN_SCRIPT_PROMPT = `I use foozol to manage multiple AI coding sessions with git worktrees.
 Each worktree needs its own dev server on a unique port.
 
-Make the dev command intelligent:
+Create a scripts/smart-dev.js that:
+1. Auto-detects git worktrees vs main repo
+2. Assigns unique ports per worktree using hash(cwd) % 1000 + base_port
+3. Checks port availability, auto-increments if in use
+4. Cross-platform (Windows/macOS/Linux) - use Node.js
+5. Auto-detects if deps need installing (compare package.json mtime vs node_modules)
+6. Auto-detects if build is stale (compare src mtime vs dist)
+7. Clean Ctrl+C termination (taskkill on Windows)
+8. Update package.json "dev" script to use this
 
-1. **Worktree detection** - Auto-detect if running from main repo or a git worktree, resolve paths correctly
-2. **Dynamic port allocation** - Assign unique, deterministic port using hash(cwd) % 1000 + base_port
-3. **Port conflict resolution** - Check if port is in use and auto-resolve by incrementing
-4. **Cross-platform** - Use Node.js (not bash) for Windows/macOS/Linux compatibility
-5. **Smart dependency detection** - Auto-detect if deps need installing (compare package.json mtime vs node_modules)
-6. **Build staleness check** - Auto-detect if build is stale (compare src mtime vs dist)
-7. **Clean termination** - Handle Ctrl+C gracefully (use taskkill on Windows)
-8. **Modify package.json directly** - Don't create separate shell scripts
-9. **Auto-detect project type** - Look for package.json, requirements.txt, Cargo.toml, go.mod, etc.
-10. **Clear output** - Print the URL/port being used so user knows where to access the app
+Here's a reference implementation to adapt for this project:
 
-First analyze the project structure, then implement the intelligent dev command.
-This enables running 3+ instances of the same project in different worktrees with zero manual config.`;
+\`\`\`javascript
+#!/usr/bin/env node
+const { spawn, execSync } = require('child_process');
+const fs = require('fs');
+const path = require('path');
+const net = require('net');
+const crypto = require('crypto');
+
+const BASE_PORT = 4500;
+const PORT_RANGE = 1000;
+
+function findGitRoot(dir) {
+  const gitPath = path.join(dir, '.git');
+  if (fs.existsSync(gitPath)) return dir;
+  const parent = path.dirname(dir);
+  if (parent === dir) return null;
+  return findGitRoot(parent);
+}
+
+function getWorktreeInfo(projectRoot) {
+  const gitPath = path.join(projectRoot, '.git');
+  if (!fs.existsSync(gitPath)) return { isWorktree: false, name: 'unknown' };
+
+  const stat = fs.statSync(gitPath);
+  if (stat.isFile()) {
+    // Worktree - .git is a file pointing to main repo
+    const content = fs.readFileSync(gitPath, 'utf8').trim();
+    const match = content.match(/gitdir:\\s*(.+)/);
+    if (match) {
+      const mainRepo = match[1].replace(/[\\/]\\.git[\\/]worktrees[\\/].+$/, '');
+      return { isWorktree: true, name: path.basename(projectRoot), mainRepo };
+    }
+  }
+  return { isWorktree: false, name: 'main', mainRepo: projectRoot };
+}
+
+function calculatePort(dirPath) {
+  const hash = crypto.createHash('md5').update(dirPath).digest('hex');
+  return BASE_PORT + (parseInt(hash.substring(0, 8), 16) % PORT_RANGE);
+}
+
+async function checkPort(port) {
+  return new Promise(resolve => {
+    const server = net.createServer();
+    server.once('error', () => resolve(false));
+    server.once('listening', () => { server.close(); resolve(true); });
+    server.listen(port, '127.0.0.1');
+  });
+}
+
+async function findAvailablePort(startPort) {
+  let port = startPort;
+  for (let i = 0; i < 100; i++) {
+    if (await checkPort(port)) return port;
+    port++;
+  }
+  throw new Error('No available port found');
+}
+
+function needsInstall(projectRoot) {
+  const nodeModules = path.join(projectRoot, 'node_modules');
+  if (!fs.existsSync(nodeModules)) return true;
+  const packageJson = path.join(projectRoot, 'package.json');
+  if (!fs.existsSync(packageJson)) return false;
+  return fs.statSync(packageJson).mtimeMs > fs.statSync(nodeModules).mtimeMs;
+}
+
+// Main: detect worktree, calculate port, check availability, run dev server
+\`\`\`
+
+Analyze this project's structure and create a complete smart-dev.js adapted for it.`;
 
 export const PanelTabBar: React.FC<PanelTabBarProps> = memo(({
   panels,
