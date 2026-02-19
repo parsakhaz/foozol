@@ -9,6 +9,9 @@
 </p>
 
 <p align="center">
+  <a href="https://foozol.com">
+    <img src="https://img.shields.io/badge/website-foozol.com-blue?style=flat-square" alt="Website">
+  </a>
   <a href="https://github.com/parsakhaz/foozol/releases/latest">
     <img src="https://img.shields.io/github/v/release/parsakhaz/foozol?style=flat-square&color=blue" alt="Latest Release">
   </a>
@@ -19,6 +22,7 @@
 </p>
 
 <p align="center">
+  <a href="https://foozol.com">Website</a> •
   <a href="#installation">Installation</a> •
   <a href="#features">Features</a> •
   <a href="#keyboard-shortcuts">Shortcuts</a> •
