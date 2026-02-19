@@ -16,89 +16,50 @@ import { Tooltip } from '../ui/Tooltip';
 const SETUP_RUN_SCRIPT_PROMPT = `I use foozol to manage multiple AI coding sessions with git worktrees.
 Each worktree needs its own dev server on a unique port.
 
-Create a scripts/smart-dev.js that:
+Create scripts/smart-dev.js (Node.js, cross-platform) that:
 1. Auto-detects git worktrees vs main repo
-2. Assigns unique ports per worktree using hash(cwd) % 1000 + base_port
+2. Assigns unique ports using hash(cwd) % 1000 + base_port
 3. Checks port availability, auto-increments if in use
-4. Cross-platform (Windows/macOS/Linux) - use Node.js
-5. Auto-detects if deps need installing (compare package.json mtime vs node_modules)
-6. Auto-detects if build is stale (compare src mtime vs dist)
-7. Clean Ctrl+C termination (taskkill on Windows)
-8. Update package.json "dev" script to use this
+4. Auto-detects if deps need installing (package.json mtime > node_modules mtime)
+5. Auto-detects if build is stale (src mtime > dist mtime)
+6. Clean Ctrl+C termination (taskkill on Windows, SIGTERM on Unix)
+7. Update package.json "dev" script to use this
 
-Here's a reference implementation to adapt for this project:
+Pseudocode reference:
+\`\`\`
+findGitRoot(dir):
+  if .git exists in dir: return dir
+  else: recurse to parent
 
-\`\`\`javascript
-#!/usr/bin/env node
-const { spawn, execSync } = require('child_process');
-const fs = require('fs');
-const path = require('path');
-const net = require('net');
-const crypto = require('crypto');
+isWorktree(projectRoot):
+  if .git is a FILE (not dir): it's a worktree
+  parse "gitdir: path" to find main repo
 
-const BASE_PORT = 4500;
-const PORT_RANGE = 1000;
+calculatePort(dirPath):
+  hash = md5(dirPath)
+  return BASE_PORT + (hash % 1000)
 
-function findGitRoot(dir) {
-  const gitPath = path.join(dir, '.git');
-  if (fs.existsSync(gitPath)) return dir;
-  const parent = path.dirname(dir);
-  if (parent === dir) return null;
-  return findGitRoot(parent);
-}
+checkPortAvailable(port):
+  try bind to port, return success/fail
 
-function getWorktreeInfo(projectRoot) {
-  const gitPath = path.join(projectRoot, '.git');
-  if (!fs.existsSync(gitPath)) return { isWorktree: false, name: 'unknown' };
+needsInstall(root):
+  return !node_modules exists OR package.json.mtime > node_modules.mtime
 
-  const stat = fs.statSync(gitPath);
-  if (stat.isFile()) {
-    // Worktree - .git is a file pointing to main repo
-    const content = fs.readFileSync(gitPath, 'utf8').trim();
-    const match = content.match(/gitdir:\\s*(.+)/);
-    if (match) {
-      const mainRepo = match[1].replace(/[\\/]\\.git[\\/]worktrees[\\/].+$/, '');
-      return { isWorktree: true, name: path.basename(projectRoot), mainRepo };
-    }
-  }
-  return { isWorktree: false, name: 'main', mainRepo: projectRoot };
-}
+needsBuild(root):
+  return !dist exists OR any src/*.ts.mtime > dist/index.js.mtime
 
-function calculatePort(dirPath) {
-  const hash = crypto.createHash('md5').update(dirPath).digest('hex');
-  return BASE_PORT + (parseInt(hash.substring(0, 8), 16) % PORT_RANGE);
-}
-
-async function checkPort(port) {
-  return new Promise(resolve => {
-    const server = net.createServer();
-    server.once('error', () => resolve(false));
-    server.once('listening', () => { server.close(); resolve(true); });
-    server.listen(port, '127.0.0.1');
-  });
-}
-
-async function findAvailablePort(startPort) {
-  let port = startPort;
-  for (let i = 0; i < 100; i++) {
-    if (await checkPort(port)) return port;
-    port++;
-  }
-  throw new Error('No available port found');
-}
-
-function needsInstall(projectRoot) {
-  const nodeModules = path.join(projectRoot, 'node_modules');
-  if (!fs.existsSync(nodeModules)) return true;
-  const packageJson = path.join(projectRoot, 'package.json');
-  if (!fs.existsSync(packageJson)) return false;
-  return fs.statSync(packageJson).mtimeMs > fs.statSync(nodeModules).mtimeMs;
-}
-
-// Main: detect worktree, calculate port, check availability, run dev server
+main():
+  root = findGitRoot(cwd)
+  worktree = isWorktree(root)
+  port = calculatePort(root)
+  if !checkPortAvailable(port): port = findNextAvailable(port)
+  if needsInstall(root): run "pnpm install"
+  if needsBuild(root): run "pnpm build:main"
+  spawn dev server with PORT env var
+  handle SIGINT/SIGTERM for clean shutdown
 \`\`\`
 
-Analyze this project's structure and create a complete smart-dev.js adapted for it.`;
+Analyze this project and create the complete smart-dev.js.`;
 
 export const PanelTabBar: React.FC<PanelTabBarProps> = memo(({
   panels,
