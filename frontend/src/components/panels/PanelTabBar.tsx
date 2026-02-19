@@ -23,47 +23,15 @@ Create scripts/foozol-run-script.js (Node.js, cross-platform) that:
 4. Auto-detects if deps need installing (package.json mtime > node_modules mtime)
 5. Auto-detects if build is stale (src mtime > dist mtime)
 6. Clean Ctrl+C termination (taskkill on Windows, SIGTERM on Unix)
-7. Update package.json 'dev' script to use this
 
-Pseudocode reference:
-findGitRoot(dir):
-  if .git exists in dir: return dir
-  else: recurse to parent
-
-isWorktree(projectRoot):
-  if .git is a FILE (not dir): this is a worktree
-  parse 'gitdir: path' to find main repo
-
-calculatePort(dirPath):
-  hash = md5(dirPath)
-  return BASE_PORT + (hash % 1000)
-
-checkPortAvailable(port):
-  try bind to port, return success/fail
-
-needsInstall(root):
-  return !node_modules exists OR package.json.mtime > node_modules.mtime
-
-needsBuild(root):
-  return !dist exists OR any src/*.ts.mtime > dist/index.js.mtime
-
-main():
-  root = findGitRoot(cwd)
-  worktree = isWorktree(root)
-  port = calculatePort(root)
-  if !checkPortAvailable(port): port = findNextAvailable(port)
-  if needsInstall(root): run 'pnpm install'
-  if needsBuild(root): run 'pnpm build:main'
-  spawn dev server with PORT env var
-  handle SIGINT/SIGTERM for clean shutdown
+PITFALLS TO WATCH OUT FOR:
+- Port collisions between main repo and worktrees - use separate port ranges
+- Electron apps need native module rebuilding after install (electron-rebuild)
+- Cross-platform compatibility (Windows vs Unix process management)
 
 Analyze this project and create the complete foozol-run-script.js.
 
-IMPORTANT: After creating the script, test it by running 'node scripts/foozol-run-script.js' to ensure it works seamlessly. Then commit and merge to main so all future worktrees have it:
-1. git add scripts/foozol-run-script.js
-2. git commit -m 'feat: Add foozol-run-script.js for intelligent dev server'
-3. git checkout main && git merge <current-branch> --no-edit
-4. git checkout <current-branch> && git rebase main`;
+IMPORTANT: After creating the script, test it by running 'node scripts/foozol-run-script.js' to ensure it works seamlessly. Then commit and merge to main so all future worktrees have it.`;
 
 export const PanelTabBar: React.FC<PanelTabBarProps> = memo(({
   panels,

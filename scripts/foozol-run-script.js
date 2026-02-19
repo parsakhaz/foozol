@@ -21,6 +21,7 @@ const net = require('net');
 const crypto = require('crypto');
 
 const BASE_PORT = 4521;
+const WORKTREE_PORT_OFFSET = 1000; // Worktrees start at 5521+
 const MAX_PORT_ATTEMPTS = 100;
 
 /**
@@ -67,11 +68,17 @@ function isWorktree(projectRoot) {
 
 /**
  * Calculate a unique port based on directory path hash
+ * Main repo uses BASE_PORT (4521), worktrees use 5521-6520 range
  */
-function calculatePort(dirPath) {
+function calculatePort(dirPath, isWorktreeDir) {
+  if (!isWorktreeDir) {
+    // Main repo always uses BASE_PORT
+    return BASE_PORT;
+  }
+  // Worktrees get a unique port in the 5521-6520 range
   const hash = crypto.createHash('md5').update(dirPath).digest('hex');
   const hashInt = parseInt(hash.substring(0, 8), 16);
-  return BASE_PORT + (hashInt % 1000);
+  return BASE_PORT + WORKTREE_PORT_OFFSET + (hashInt % 1000);
 }
 
 /**
@@ -162,6 +169,34 @@ function needsInstall(root) {
 }
 
 /**
+ * Check if native modules need rebuilding for Electron
+ * This checks if the better-sqlite3 binary exists and has a recent rebuild marker
+ */
+function needsNativeRebuild(root) {
+  // Look for our rebuild marker file
+  const markerPath = path.join(root, 'node_modules', '.electron-rebuild-marker');
+
+  if (!fs.existsSync(markerPath)) {
+    return true;
+  }
+
+  // Check if package.json changed since last rebuild
+  const packageJsonPath = path.join(root, 'package.json');
+  const packageJsonStats = fs.statSync(packageJsonPath);
+  const markerStats = fs.statSync(markerPath);
+
+  return packageJsonStats.mtimeMs > markerStats.mtimeMs;
+}
+
+/**
+ * Create marker file after successful native rebuild
+ */
+function markNativeRebuildComplete(root) {
+  const markerPath = path.join(root, 'node_modules', '.electron-rebuild-marker');
+  fs.writeFileSync(markerPath, new Date().toISOString());
+}
+
+/**
  * Check if build is needed
  */
 function needsBuild(root) {
@@ -241,9 +276,9 @@ async function main() {
   const worktree = isWorktree(projectRoot);
   console.log(`🌲 Git worktree: ${worktree ? 'YES' : 'NO (main repo)'}`);
 
-  // Calculate unique port
-  let port = calculatePort(projectRoot);
-  console.log(`🔢 Calculated port: ${port}`);
+  // Calculate unique port (worktrees get offset range to avoid conflicts)
+  let port = calculatePort(projectRoot, worktree);
+  console.log(`🔢 Calculated port: ${port}${worktree ? ' (worktree range)' : ' (main repo)'}`);
 
   // Check port availability
   const portAvailable = await checkPortAvailable(port);
@@ -259,8 +294,18 @@ async function main() {
   if (needsInstall(projectRoot)) {
     console.log('\n📦 Dependencies out of date, installing...');
     execCommand('pnpm install', projectRoot);
+
+    // Rebuild native modules for Electron (critical for better-sqlite3, node-pty, etc.)
+    console.log('\n🔧 Rebuilding native modules for Electron...');
+    execCommand('npx @electron/rebuild -f -w better-sqlite3-multiple-ciphers', projectRoot);
+    markNativeRebuildComplete(projectRoot);
+  } else if (needsNativeRebuild(projectRoot)) {
+    // Dependencies are installed but native modules need rebuild
+    console.log('\n🔧 Native modules need rebuilding for Electron...');
+    execCommand('npx @electron/rebuild -f -w better-sqlite3-multiple-ciphers', projectRoot);
+    markNativeRebuildComplete(projectRoot);
   } else {
-    console.log('\n✅ Dependencies up to date');
+    console.log('\n✅ Dependencies and native modules up to date');
   }
 
   // Check if we need to build
