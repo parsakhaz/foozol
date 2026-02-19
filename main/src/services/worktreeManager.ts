@@ -701,9 +701,7 @@ export class WorktreeManager {
         // Add foozol footer if enabled
         const fullMessage = enableCommitFooter ? `${commitMessage}
 
-💎 Built using [foozol](https://github.com/parsakhaz/foozol)
-
-Co-Authored-By: ParsaKhaz <parsa@dcouple.ai>` : commitMessage;
+Co-Authored-By: foozol <foozol@dcouple.ai>` : commitMessage;
 
         // Properly escape commit message for cross-platform compatibility
         const escapedMessage = fullMessage.replace(/"/g, '\\"');

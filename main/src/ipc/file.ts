@@ -300,9 +300,7 @@ export function registerFileHandlers(ipcMain: IpcMain, services: AppServices): v
         // Create the commit with foozol signature if enabled
         const commitMessage = enableCommitFooter ? `${request.message}
 
-💎 Built using [foozol](https://github.com/parsakhaz/foozol)
-
-Co-Authored-By: ParsaKhaz <parsa@dcouple.ai>` : request.message;
+Co-Authored-By: foozol <foozol@dcouple.ai>` : request.message;
 
         // Use a temporary file to handle commit messages with special characters
         const tmpFile = path.join(os.tmpdir(), `foozol-commit-${Date.now()}.txt`);
@@ -338,9 +336,7 @@ Co-Authored-By: ParsaKhaz <parsa@dcouple.ai>` : request.message;
             
             const retryMessage = enableCommitFooter ? `${request.message}
 
-💎 Built using [foozol](https://github.com/parsakhaz/foozol)
-
-Co-Authored-By: ParsaKhaz <parsa@dcouple.ai>` : request.message;
+Co-Authored-By: foozol <foozol@dcouple.ai>` : request.message;
 
             // Use a temporary file for retry as well
             const tmpFile = path.join(os.tmpdir(), `foozol-commit-retry-${Date.now()}.txt`);
