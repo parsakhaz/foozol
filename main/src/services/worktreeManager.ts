@@ -701,7 +701,7 @@ export class WorktreeManager {
         // Add foozol footer if enabled
         const fullMessage = enableCommitFooter ? `${commitMessage}
 
-Co-Authored-By: foozol <foozol@dcouple.ai>` : commitMessage;
+Co-Authored-By: foozol <noreply@foozol.dev>` : commitMessage;
 
         // Properly escape commit message for cross-platform compatibility
         const escapedMessage = fullMessage.replace(/"/g, '\\"');
