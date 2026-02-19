@@ -1,5 +1,5 @@
 import React, { useCallback, memo, useState, useRef, useEffect, useMemo } from 'react';
-import { Plus, X, Terminal, ChevronDown, MessageSquare, GitBranch, FileCode, MoreVertical, BarChart3, Code2, Edit2, PanelRight, FolderTree, TerminalSquare, Trash2, Wrench } from 'lucide-react';
+import { Plus, X, Terminal, ChevronDown, MessageSquare, GitBranch, FileCode, MoreVertical, BarChart3, Code2, Edit2, PanelRight, FolderTree, TerminalSquare, Trash2, Wrench, Play } from 'lucide-react';
 import { cn } from '../../utils/cn';
 import { PanelTabBarProps, PanelCreateOptions } from '../../types/panelComponents';
 import { ToolPanel, ToolPanelType, PANEL_CAPABILITIES, LogsPanelState, BaseAIPanelState, PanelStatus } from '../../../../shared/types/panels';
@@ -556,6 +556,20 @@ export const PanelTabBar: React.FC<PanelTabBarProps> = memo(({
             </div>
           )}
         </div>
+
+        {/* Run Dev Server button */}
+        <Tooltip content="Run Dev Server" side="bottom">
+          <button
+            className="h-9 px-2 text-text-tertiary hover:text-status-success hover:bg-surface-hover transition-colors flex-shrink-0"
+            onClick={() => handleAddPanel('terminal', {
+              initialCommand: 'node scripts/foozol-run-script.js || npm run dev',
+              title: 'Dev Server'
+            })}
+            title="Run Dev Server"
+          >
+            <Play className="w-4 h-4" />
+          </button>
+        </Tooltip>
 
         {/* Right side actions */}
         <div className="flex items-center gap-1 flex-shrink-0 ml-auto">
