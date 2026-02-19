@@ -59,7 +59,7 @@ main():
 
 Analyze this project and create the complete foozol-run-script.js.
 
-IMPORTANT: After creating the script, commit it and merge to main so all future worktrees have it:
+IMPORTANT: After creating the script, test it by running 'node scripts/foozol-run-script.js' to ensure it works seamlessly. Then commit and merge to main so all future worktrees have it:
 1. git add scripts/foozol-run-script.js
 2. git commit -m 'feat: Add foozol-run-script.js for intelligent dev server'
 3. git checkout main && git merge <current-branch> --no-edit
