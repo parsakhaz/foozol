@@ -31,7 +31,6 @@ export const ProjectView: React.FC<ProjectViewProps> = ({
   const [mainRepoSessionId, setMainRepoSessionId] = useState<string | null>(null);
   const [mainRepoSession, setMainRepoSession] = useState<Session | null>(null);
   const [isLoadingSession, setIsLoadingSession] = useState(false);
-  const [pendingAiPrompt, setPendingAiPrompt] = useState<{ aiTool: 'claude' | 'codex'; prompt: string } | null>(null);
   const { showError } = useErrorStore();
 
   // Panel store state and actions

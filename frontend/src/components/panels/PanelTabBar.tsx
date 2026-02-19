@@ -1,5 +1,5 @@
 import React, { useCallback, memo, useState, useRef, useEffect, useMemo } from 'react';
-import { Plus, X, Terminal, ChevronDown, MessageSquare, GitBranch, FileCode, MoreVertical, BarChart3, Code2, Edit2, PanelRight, FolderTree, TerminalSquare, Trash2 } from 'lucide-react';
+import { Plus, X, Terminal, ChevronDown, MessageSquare, GitBranch, FileCode, MoreVertical, BarChart3, Code2, Edit2, PanelRight, FolderTree, TerminalSquare, Trash2, Wrench } from 'lucide-react';
 import { cn } from '../../utils/cn';
 import { PanelTabBarProps, PanelCreateOptions } from '../../types/panelComponents';
 import { ToolPanel, ToolPanelType, PANEL_CAPABILITIES, LogsPanelState, BaseAIPanelState, PanelStatus } from '../../../../shared/types/panels';
@@ -11,6 +11,26 @@ import { StatusIndicator } from '../StatusIndicator';
 import { useConfigStore } from '../../stores/configStore';
 import { formatKeyDisplay } from '../../utils/hotkeyUtils';
 import { Tooltip } from '../ui/Tooltip';
+
+// Prompt for setting up intelligent dev command
+const SETUP_RUN_SCRIPT_PROMPT = `I use foozol to manage multiple AI coding sessions with git worktrees.
+Each worktree needs its own dev server on a unique port.
+
+Make the dev command intelligent:
+
+1. **Worktree detection** - Auto-detect if running from main repo or a git worktree, resolve paths correctly
+2. **Dynamic port allocation** - Assign unique, deterministic port using hash(cwd) % 1000 + base_port
+3. **Port conflict resolution** - Check if port is in use and auto-resolve by incrementing
+4. **Cross-platform** - Use Node.js (not bash) for Windows/macOS/Linux compatibility
+5. **Smart dependency detection** - Auto-detect if deps need installing (compare package.json mtime vs node_modules)
+6. **Build staleness check** - Auto-detect if build is stale (compare src mtime vs dist)
+7. **Clean termination** - Handle Ctrl+C gracefully (use taskkill on Windows)
+8. **Modify package.json directly** - Don't create separate shell scripts
+9. **Auto-detect project type** - Look for package.json, requirements.txt, Cargo.toml, go.mod, etc.
+10. **Clear output** - Print the URL/port being used so user knows where to access the app
+
+First analyze the project structure, then implement the intelligent dev command.
+This enables running 3+ instances of the same project in different worktrees with zero manual config.`;
 
 export const PanelTabBar: React.FC<PanelTabBarProps> = memo(({
   panels,
@@ -412,6 +432,19 @@ export const PanelTabBar: React.FC<PanelTabBarProps> = memo(({
                 >
                   <Terminal className="w-4 h-4" />
                   <span className="ml-2">Terminal (Codex)</span>
+                </button>
+              )}
+              {/* Setup Run Script - creates intelligent dev command */}
+              {availablePanelTypes.includes('terminal') && (
+                <button
+                  className="flex items-center w-full px-4 py-2 text-sm text-text-secondary transition-colors hover:bg-surface-hover hover:text-text-primary text-left"
+                  onClick={() => handleAddPanel('terminal', {
+                    initialCommand: `claude --dangerously-skip-permissions --prompt "${SETUP_RUN_SCRIPT_PROMPT.replace(/"/g, '\\"').replace(/\n/g, '\\n')}"`,
+                    title: 'Setup Run Script'
+                  })}
+                >
+                  <Wrench className="w-4 h-4" />
+                  <span className="ml-2">Setup Run Script</span>
                 </button>
               )}
               {/* Saved custom commands */}

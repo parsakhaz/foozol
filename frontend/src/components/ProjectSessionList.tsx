@@ -16,23 +16,24 @@ import { API } from '../utils/api';
 import type { Session, GitStatus } from '../types/session';
 import type { Project, CreateProjectRequest } from '../types/project';
 
-const RUN_SCRIPT_PROMPT = `I'm using foozol, a tool that manages multiple AI coding sessions using git worktrees. Each session runs in its own worktree directory.
+const RUN_SCRIPT_PROMPT = `I use foozol to manage multiple AI coding sessions with git worktrees.
+Each worktree needs its own dev server on a unique port.
 
-Please analyze this project and create a **foozol-run.sh** script. This script needs to:
+Make the dev command intelligent:
 
-1. **Work from any git worktree** - Detect if running from a worktree subdirectory and resolve paths correctly. The main repo might be at ../.. or similar relative to the worktree.
+1. **Worktree detection** - Auto-detect if running from main repo or a git worktree, resolve paths correctly
+2. **Dynamic port allocation** - Assign unique, deterministic port using hash(cwd) % 1000 + base_port
+3. **Port conflict resolution** - Check if port is in use and auto-resolve by incrementing
+4. **Cross-platform** - Use Node.js (not bash) for Windows/macOS/Linux compatibility
+5. **Smart dependency detection** - Auto-detect if deps need installing (compare package.json mtime vs node_modules)
+6. **Build staleness check** - Auto-detect if build is stale (compare src mtime vs dist)
+7. **Clean termination** - Handle Ctrl+C gracefully (use taskkill on Windows)
+8. **Modify package.json directly** - Don't create separate shell scripts
+9. **Auto-detect project type** - Look for package.json, requirements.txt, Cargo.toml, go.mod, etc.
+10. **Clear output** - Print the URL/port being used so user knows where to access the app
 
-2. **Dynamic port allocation** - Generate a unique port based on the current directory path (e.g., hash the path and use: base_port + (hash % 1000)). This allows multiple worktrees to run the same project simultaneously without port conflicts.
-
-3. **Find dependencies intelligently** - For Node.js projects, check for node_modules locally first, then in parent directories. For Python, check for venv/virtualenv. Handle monorepo structures.
-
-4. **Safe process management** - Before starting, check if something is already running on the calculated port and offer to kill it or pick a different port.
-
-5. **Auto-detect project type** - Look for package.json, requirements.txt, Cargo.toml, go.mod, etc. and use the appropriate start command.
-
-6. **Clear output** - Print the URL/port being used so the user knows where to access the running app.
-
-First, analyze the project structure to understand what type of project this is, then create the foozol-run.sh script with clear comments.`;
+First analyze the project structure, then implement the intelligent dev command.
+This enables running 3+ instances of the same project in different worktrees with zero manual config.`;
 
 interface ProjectSessionListProps {
   sessionSortAscending: boolean;
