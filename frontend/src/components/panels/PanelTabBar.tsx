@@ -16,7 +16,7 @@ import { Tooltip } from '../ui/Tooltip';
 const SETUP_RUN_SCRIPT_PROMPT = `I use foozol to manage multiple AI coding sessions with git worktrees.
 Each worktree needs its own dev server on a unique port.
 
-Create scripts/smart-dev.js (Node.js, cross-platform) that:
+Create scripts/foozol-run-script.js (Node.js, cross-platform) that:
 1. Auto-detects git worktrees vs main repo
 2. Assigns unique ports using hash(cwd) % 1000 + base_port
 3. Checks port availability, auto-increments if in use
@@ -59,7 +59,7 @@ main():
   handle SIGINT/SIGTERM for clean shutdown
 \`\`\`
 
-Analyze this project and create the complete smart-dev.js.`;
+Analyze this project and create the complete foozol-run-script.js.`;
 
 export const PanelTabBar: React.FC<PanelTabBarProps> = memo(({
   panels,
