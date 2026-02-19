@@ -558,18 +558,37 @@ export const PanelTabBar: React.FC<PanelTabBarProps> = memo(({
         </div>
 
         {/* Run Dev Server button */}
-        <Tooltip content="Run Dev Server" side="bottom">
-          <button
-            className="h-9 px-2 text-text-tertiary hover:text-status-success hover:bg-surface-hover transition-colors flex-shrink-0"
-            onClick={() => handleAddPanel('terminal', {
-              initialCommand: 'node scripts/foozol-run-script.js || npm run dev',
-              title: 'Dev Server'
-            })}
-            title="Run Dev Server"
-          >
-            <Play className="w-4 h-4" />
-          </button>
-        </Tooltip>
+        {session && (
+          <Tooltip content="Run Dev Server" side="bottom">
+            <button
+              className="h-9 px-2 text-text-tertiary hover:text-status-success hover:bg-surface-hover transition-colors flex-shrink-0"
+              onClick={async () => {
+                // Check if foozol-run-script.js exists in this session's worktree
+                const scriptExists = await window.electronAPI?.invoke('file:exists', {
+                  sessionId: session.id,
+                  filePath: 'scripts/foozol-run-script.js'
+                });
+
+                if (scriptExists) {
+                  // Script exists - run it
+                  handleAddPanel('terminal', {
+                    initialCommand: 'node scripts/foozol-run-script.js',
+                    title: 'Dev Server'
+                  });
+                } else {
+                  // Script doesn't exist - trigger Claude to create it
+                  handleAddPanel('terminal', {
+                    initialCommand: `claude --dangerously-skip-permissions --prompt "${SETUP_RUN_SCRIPT_PROMPT.replace(/"/g, '\\"').replace(/\n/g, '\\n')}"`,
+                    title: 'Setup Run Script'
+                  });
+                }
+              }}
+              title="Run Dev Server"
+            >
+              <Play className="w-4 h-4" />
+            </button>
+          </Tooltip>
+        )}
 
         {/* Right side actions */}
         <div className="flex items-center gap-1 flex-shrink-0 ml-auto">
