@@ -1,11 +1,18 @@
+import { useMemo } from 'react';
 import { GitBranch, Terminal, Folder, Zap, MessageSquare, Settings, Bell, History } from 'lucide-react';
 import { Modal, ModalHeader, ModalBody } from './ui/Modal';
 import { useHotkeyStore, type HotkeyDefinition } from '../stores/hotkeyStore';
 import { formatKeyDisplay, CATEGORY_LABELS } from '../utils/hotkeyUtils';
 
 function KeyboardShortcutsSection() {
-  const allHotkeys = useHotkeyStore((s) => s.getAll())
-    .filter((h) => !h.enabled || h.enabled());
+  const hotkeys = useHotkeyStore((s) => s.hotkeys);
+  const allHotkeys = useMemo(
+    () =>
+      Array.from(hotkeys.values())
+        .filter((def) => !def.devOnly || process.env.NODE_ENV === 'development')
+        .filter((h) => !h.enabled || h.enabled()),
+    [hotkeys]
+  );
 
   const grouped = allHotkeys.reduce<Record<string, HotkeyDefinition[]>>((acc, def) => {
     if (!acc[def.category]) acc[def.category] = [];
