@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { X, ExternalLink, Download, Check, Loader2, Github } from 'lucide-react';
+import { X, Download, Check, Loader2, Github } from 'lucide-react';
 import { UpdateDialog } from './UpdateDialog';
 
 interface VersionInfo {
@@ -89,15 +89,24 @@ export function AboutDialog({ isOpen, onClose }: AboutDialogProps) {
     }
   };
 
+  useEffect(() => {
+    if (!isOpen) return;
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') onClose();
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [isOpen, onClose]);
+
   if (!isOpen) return null;
 
   return (
-    <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-50">
-      <div className="bg-surface-primary rounded-xl shadow-2xl w-[360px] mx-4 overflow-hidden border border-border-primary/50">
+    <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-50" onClick={onClose}>
+      <div className="relative bg-surface-primary rounded-xl shadow-2xl w-[360px] mx-4 overflow-hidden border border-border-primary/50" onClick={(e) => e.stopPropagation()}>
         {/* Close button - absolute positioned */}
         <button
           onClick={onClose}
-          className="absolute top-4 right-4 text-text-tertiary hover:text-text-primary transition-colors p-1 rounded-md hover:bg-surface-secondary"
+          className="absolute top-4 right-4 z-10 text-text-tertiary hover:text-text-primary transition-colors p-1 rounded-md hover:bg-surface-secondary"
         >
           <X className="w-4 h-4" />
         </button>
