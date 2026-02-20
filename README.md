@@ -12,6 +12,9 @@
   <a href="https://foozol.com">
     <img src="https://img.shields.io/badge/website-foozol.com-blue?style=flat-square" alt="Website">
   </a>
+  <a href="https://discord.gg/BdMyubeAZn">
+    <img src="https://img.shields.io/badge/discord-join-5865F2?style=flat-square&logo=discord&logoColor=white" alt="Discord">
+  </a>
   <a href="https://github.com/parsakhaz/foozol/releases/latest">
     <img src="https://img.shields.io/github/v/release/parsakhaz/foozol?style=flat-square&color=blue" alt="Latest Release">
   </a>
@@ -23,6 +26,7 @@
 
 <p align="center">
   <a href="https://foozol.com">Website</a> •
+  <a href="https://discord.gg/BdMyubeAZn">Discord</a> •
   <a href="#installation">Installation</a> •
   <a href="#features">Features</a> •
   <a href="#keyboard-shortcuts">Shortcuts</a> •
