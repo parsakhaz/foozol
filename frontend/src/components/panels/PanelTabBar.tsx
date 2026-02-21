@@ -1,5 +1,5 @@
 import React, { useCallback, memo, useState, useRef, useEffect, useMemo } from 'react';
-import { Plus, X, Terminal, ChevronDown, MessageSquare, GitBranch, FileCode, MoreVertical, BarChart3, Code2, Edit2, PanelRight, FolderTree, TerminalSquare, Trash2, Wrench, Play } from 'lucide-react';
+import { Plus, X, Terminal, ChevronDown, MessageSquare, GitBranch, FileCode, MoreVertical, BarChart3, Code2, Edit2, PanelRight, FolderTree, TerminalSquare, Wrench, Play } from 'lucide-react';
 import { cn } from '../../utils/cn';
 import { PanelTabBarProps, PanelCreateOptions } from '../../types/panelComponents';
 import { ToolPanel, ToolPanelType, PANEL_CAPABILITIES, LogsPanelState, BaseAIPanelState, PanelStatus } from '../../../../shared/types/panels';
@@ -533,20 +533,18 @@ export const PanelTabBar: React.FC<PanelTabBarProps> = memo(({
                       initialCommand: cmd.command,
                       title: cmd.name
                     })}
+                    onKeyDown={(e) => {
+                      // Delete or Backspace removes the custom command
+                      if (e.key === 'Delete' || e.key === 'Backspace') {
+                        e.preventDefault();
+                        e.stopPropagation();
+                        deleteCustomCommand(index);
+                      }
+                    }}
+                    title={`${cmd.name} (Delete/Backspace to remove)`}
                   >
                     <TerminalSquare className="w-4 h-4 flex-shrink-0" />
                     <span className="ml-2 truncate">{cmd.name}</span>
-                  </button>
-                  <button
-                    className="p-1.5 mr-2 rounded opacity-0 group-hover/cmd:opacity-100 group-focus-within/cmd:opacity-100 transition-opacity text-text-muted hover:text-status-error focus:opacity-100 focus:outline-none focus:text-status-error"
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      deleteCustomCommand(index);
-                    }}
-                    title={`Remove "${cmd.name}"`}
-                    tabIndex={-1}
-                  >
-                    <Trash2 className="w-3 h-3" />
                   </button>
                 </div>
               );})}
