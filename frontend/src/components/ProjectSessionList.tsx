@@ -232,7 +232,7 @@ export function ProjectSessionList({ sessionSortAscending }: ProjectSessionListP
         label: 'Next Session',
         keys,
         category: 'session',
-        enabled: () => allActiveSessionsRef.current.length > 0,
+        enabled: () => allActiveSessionsRef.current.length > 1,
         action: () => cycleSession('next'),
         showInPalette: i === 0, // Only first entry shows in Command Palette
       });
@@ -246,7 +246,7 @@ export function ProjectSessionList({ sessionSortAscending }: ProjectSessionListP
         label: 'Previous Session',
         keys,
         category: 'session',
-        enabled: () => allActiveSessionsRef.current.length > 0,
+        enabled: () => allActiveSessionsRef.current.length > 1,
         action: () => cycleSession('prev'),
         showInPalette: i === 0, // Only first entry shows in Command Palette
       });
