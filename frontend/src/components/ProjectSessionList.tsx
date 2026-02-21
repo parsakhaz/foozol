@@ -126,13 +126,31 @@ export function ProjectSessionList({ sessionSortAscending }: ProjectSessionListP
     return result;
   }, [projects, expandedProjects, sessionsByProject]);
 
+  // Flat list of ALL active sessions (for cycling - includes collapsed projects)
+  const allActiveSessions = useMemo(() => {
+    const result: Session[] = [];
+    projects.forEach(p => {
+      const list = sessionsByProject.get(p.id) || [];
+      result.push(...list);
+    });
+    return result;
+  }, [projects, sessionsByProject]);
+
   // Register ⌘1-⌘9 hotkeys with dynamic session name labels
   const allVisibleSessionsRef = useRef(allVisibleSessions);
   allVisibleSessionsRef.current = allVisibleSessions;
+  const allActiveSessionsRef = useRef(allActiveSessions);
+  allActiveSessionsRef.current = allActiveSessions;
+  const activeSessionIdRef = useRef(activeSessionId);
+  activeSessionIdRef.current = activeSessionId;
   const setActiveSessionRef = useRef(setActiveSession);
   setActiveSessionRef.current = setActiveSession;
   const navigateToSessionsRef = useRef(navigateToSessions);
   navigateToSessionsRef.current = navigateToSessions;
+  const expandedProjectsRef = useRef(expandedProjects);
+  expandedProjectsRef.current = expandedProjects;
+  const setExpandedProjectsRef = useRef(setExpandedProjects);
+  setExpandedProjectsRef.current = setExpandedProjects;
 
   // Build stable label key so we re-register when session names/projects change
   const sessionLabelKey = allVisibleSessions.slice(0, 9).map(s => `${s.name}:${s.projectId}`).join('|');
@@ -170,6 +188,76 @@ export function ProjectSessionList({ sessionSortAscending }: ProjectSessionListP
     }
     return () => ids.forEach(id => unregister(id));
   }, [register, unregister, sessionLabelKey]);
+
+  // Session cycling function
+  const cycleSession = useCallback((direction: 'next' | 'prev') => {
+    const sessions = allActiveSessionsRef.current;
+    if (sessions.length === 0) return;
+
+    const currentId = activeSessionIdRef.current;
+    const currentIndex = sessions.findIndex(s => s.id === currentId);
+
+    let nextIndex: number;
+    if (currentIndex === -1) {
+      nextIndex = 0; // No active session, go to first
+    } else if (direction === 'next') {
+      nextIndex = (currentIndex + 1) % sessions.length;
+    } else {
+      nextIndex = (currentIndex - 1 + sessions.length) % sessions.length;
+    }
+
+    const nextSession = sessions[nextIndex];
+
+    // Auto-expand the project if it's collapsed
+    if (nextSession.projectId != null && !expandedProjectsRef.current.has(nextSession.projectId)) {
+      setExpandedProjectsRef.current(prev => {
+        const next = new Set(prev);
+        next.add(nextSession.projectId!);
+        return next;
+      });
+    }
+
+    setActiveSessionRef.current(nextSession.id);
+    navigateToSessionsRef.current();
+  }, []);
+
+  // Register session cycling hotkeys
+  useEffect(() => {
+    // Keys arrays: first entry shows in palette, rest are hidden alternatives
+    const nextKeys = ['mod+Tab', 'mod+ArrowUp', 'alt+ArrowUp', 'mod+s'];
+    const prevKeys = ['mod+shift+Tab', 'mod+ArrowDown', 'alt+ArrowDown', 'mod+w'];
+    const ids: string[] = [];
+
+    nextKeys.forEach((keys, i) => {
+      const id = `cycle-session-next-${i}`;
+      ids.push(id);
+      register({
+        id,
+        label: 'Next Session',
+        keys,
+        category: 'session',
+        enabled: () => allActiveSessionsRef.current.length > 0,
+        action: () => cycleSession('next'),
+        showInPalette: i === 0, // Only first entry shows in Command Palette
+      });
+    });
+
+    prevKeys.forEach((keys, i) => {
+      const id = `cycle-session-prev-${i}`;
+      ids.push(id);
+      register({
+        id,
+        label: 'Previous Session',
+        keys,
+        category: 'session',
+        enabled: () => allActiveSessionsRef.current.length > 0,
+        action: () => cycleSession('prev'),
+        showInPalette: i === 0, // Only first entry shows in Command Palette
+      });
+    });
+
+    return () => ids.forEach(id => unregister(id));
+  }, [register, unregister, cycleSession]);
 
   // Auto-expand projects with active session or that have sessions
   useEffect(() => {

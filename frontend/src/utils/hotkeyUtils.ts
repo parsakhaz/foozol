@@ -29,6 +29,7 @@ export function formatKeyDisplay(keys: string): string {
       case 'arrowright': return '→';
       case 'arrowup': return '↑';
       case 'arrowdown': return '↓';
+      case 'tab': return 'Tab';
       default: return part.length === 1 ? part.toUpperCase() : part;
     }
   });

@@ -15,15 +15,21 @@ export interface HotkeyDefinition {
   devOnly?: boolean;
   /** Is this hotkey currently enabled? Checked on every keypress. */
   enabled?: () => boolean;
+  /** If false, hotkey works but doesn't appear in Command Palette/Help. Defaults to true. */
+  showInPalette?: boolean;
+}
+
+interface GetAllOptions {
+  paletteOnly?: boolean;
 }
 
 interface HotkeyStore {
   hotkeys: Map<string, HotkeyDefinition>;
   register: (def: HotkeyDefinition) => void;
   unregister: (id: string) => void;
-  getAll: () => HotkeyDefinition[];
+  getAll: (options?: GetAllOptions) => HotkeyDefinition[];
   getByCategory: (category: HotkeyDefinition['category']) => HotkeyDefinition[];
-  search: (query: string) => HotkeyDefinition[];
+  search: (query: string, options?: GetAllOptions) => HotkeyDefinition[];
 }
 
 // --- Key matching logic (module-level, not in store) ---
@@ -144,11 +150,15 @@ export const useHotkeyStore = create<HotkeyStore>((set, get) => ({
     });
   },
 
-  getAll: () => {
+  getAll: (options?: GetAllOptions) => {
     const state = get();
-    return Array.from(state.hotkeys.values()).filter(
+    let results = Array.from(state.hotkeys.values()).filter(
       (def) => !def.devOnly || process.env.NODE_ENV === 'development'
     );
+    if (options?.paletteOnly) {
+      results = results.filter((def) => def.showInPalette !== false);
+    }
+    return results;
   },
 
   getByCategory: (category) => {
@@ -157,10 +167,10 @@ export const useHotkeyStore = create<HotkeyStore>((set, get) => ({
       .filter((def) => def.category === category);
   },
 
-  search: (query) => {
+  search: (query, options?: GetAllOptions) => {
     const lower = query.toLowerCase();
     return get()
-      .getAll()
+      .getAll(options)
       .filter(
         (def) =>
           def.label.toLowerCase().includes(lower) ||
