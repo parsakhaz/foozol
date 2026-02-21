@@ -31,7 +31,8 @@ jobs:
         APPLE_ID: ${{ secrets.APPLE_ID }}
         APPLE_APP_SPECIFIC_PASSWORD: ${{ secrets.APPLE_APP_PASSWORD }}
         APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
-        CSC_IDENTITY_AUTO_DISCOVERY: 'true'
+        CSC_IDENTITY_AUTO_DISCOVERY: ${{ secrets.APPLE_CERTIFICATE && 'true' || 'false' }}
+        CSC_DISABLE: ${{ !secrets.APPLE_CERTIFICATE && 'true' || 'false' }}
     - run: ls -la dist-electron/
     - uses: actions/upload-artifact@v4
       with:
