@@ -380,27 +380,6 @@ export function ProjectSessionList({ sessionSortAscending }: ProjectSessionListP
 
               {isExpanded && (
                 <div className="mt-0.5">
-                  {/* + New workspace + project menu */}
-                  <div className="flex items-center justify-between pl-6 pr-3">
-                    <button
-                      onClick={() => handleNewSession(project)}
-                      className="flex items-center gap-1.5 py-1.5 text-xs text-text-tertiary hover:text-text-primary transition-colors"
-                    >
-                      <Plus className="w-3.5 h-3.5" />
-                      <span>New workspace</span>
-                    </button>
-                    <Dropdown
-                      trigger={
-                        <button className="p-1 rounded text-text-muted hover:text-text-tertiary hover:bg-surface-hover transition-colors">
-                          <MoreHorizontal className="w-3.5 h-3.5" />
-                        </button>
-                      }
-                      items={projectMenuItems}
-                      position="auto"
-                      width="sm"
-                    />
-                  </div>
-
                   {/* Sessions */}
                   {projectSessions.map((session) => (
                     <SessionRow
@@ -422,6 +401,27 @@ export function ProjectSessionList({ sessionSortAscending }: ProjectSessionListP
                       onRenameCancel={() => { setEditingSessionId(null); setEditingName(''); }}
                     />
                   ))}
+
+                  {/* + New workspace + project menu */}
+                  <div className="flex items-center justify-between pl-6 pr-3">
+                    <button
+                      onClick={() => handleNewSession(project)}
+                      className="flex items-center gap-1.5 py-1.5 text-xs text-text-tertiary hover:text-text-primary transition-colors"
+                    >
+                      <Plus className="w-3.5 h-3.5" />
+                      <span>New workspace</span>
+                    </button>
+                    <Dropdown
+                      trigger={
+                        <button className="p-1 rounded text-text-muted hover:text-text-tertiary hover:bg-surface-hover transition-colors">
+                          <MoreHorizontal className="w-3.5 h-3.5" />
+                        </button>
+                      }
+                      items={projectMenuItems}
+                      position="auto"
+                      width="sm"
+                    />
+                  </div>
                 </div>
               )}
             </div>
