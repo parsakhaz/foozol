@@ -1,7 +1,7 @@
 import { IpcMain } from 'electron';
 import type { AppServices } from './types';
 import { execSync } from '../utils/commandExecutor';
-import { buildGitCommitCommand, escapeShellArg } from '../utils/shellEscape';
+import { buildGitCommitCommand } from '../utils/shellEscape';
 import { panelManager } from '../services/panelManager';
 import { mainWindow } from '../index';
 import { panelEventBus } from '../services/panelEventBus';
