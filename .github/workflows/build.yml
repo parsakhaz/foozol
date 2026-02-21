@@ -2,7 +2,7 @@ name: Build and Publish Canary
 
 on:
   push:
-    branches: [ main, 'release/**' ]
+    branches: [ release ]
   workflow_dispatch:
 
 jobs:
