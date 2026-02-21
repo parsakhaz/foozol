@@ -60,7 +60,8 @@ export const SelectionPopover: React.FC<SelectionPopoverProps> = ({
   if (!visible) return null;
 
   const trimmedText = text.trim();
-  const isUrl = URL_PATTERN.test(trimmedText);
+  const urlMatch = trimmedText.match(URL_PATTERN);
+  const isUrl = urlMatch !== null;
   const isFile = !isUrl && isFilePath(trimmedText);
 
   const handleCopy = async () => {
@@ -73,8 +74,9 @@ export const SelectionPopover: React.FC<SelectionPopoverProps> = ({
   };
 
   const handleOpenUrl = () => {
-    if (isUrl) {
-      window.electronAPI.openExternal(trimmedText);
+    if (urlMatch) {
+      // Extract just the URL, not surrounding text like "error: https://..."
+      window.electronAPI.openExternal(urlMatch[0]);
       onClose();
     }
   };
