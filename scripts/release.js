@@ -31,7 +31,11 @@ fs.writeFileSync(pkgPath, JSON.stringify(pkg, null, 2) + '\n');
 
 // Commit, tag, push
 execSync('git add package.json', { cwd: rootDir, stdio: 'inherit' });
-execSync(`git commit -m "release: v${cleanVersion}"`, { cwd: rootDir, stdio: 'inherit' });
+try {
+  execSync(`git commit -m "release: v${cleanVersion}"`, { cwd: rootDir, stdio: 'inherit' });
+} catch {
+  console.log('No version change to commit, continuing with tag...');
+}
 execSync(`git tag v${cleanVersion}`, { cwd: rootDir, stdio: 'inherit' });
 execSync('git push origin HEAD', { cwd: rootDir, stdio: 'inherit' });
 execSync(`git push origin v${cleanVersion}`, { cwd: rootDir, stdio: 'inherit' });
