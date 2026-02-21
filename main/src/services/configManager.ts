@@ -231,4 +231,13 @@ export class ConfigManager extends EventEmitter {
     this.config.analytics.distinctId = distinctId;
     await this.saveConfig();
   }
+
+  getPreferredShell(): string {
+    const pref = this.config.preferredShell || 'auto';
+    const validPrefs = ['auto', 'gitbash', 'powershell', 'pwsh', 'cmd'];
+    return validPrefs.includes(pref) ? pref : 'auto';
+  }
 }
+
+// Singleton instance for services that need direct access
+export const configManager = new ConfigManager();

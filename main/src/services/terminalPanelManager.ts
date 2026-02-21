@@ -8,6 +8,7 @@ import { getShellPath } from '../utils/shellPath';
 import { ShellDetector } from '../utils/shellDetector';
 import type { AnalyticsManager } from './analyticsManager';
 import { getWSLShellSpawn, WSLContext } from '../utils/wslUtils';
+import { configManager } from './configManager';
 
 const HIGH_WATERMARK = 100_000; // 100KB — pause PTY when pending exceeds this
 const LOW_WATERMARK = 10_000;   // 10KB — resume PTY when pending drops below this
@@ -139,7 +140,8 @@ export class TerminalPanelManager {
       shellArgs = wslShell.args;
       spawnCwd = undefined; // WSL handles cwd
     } else {
-      const shellInfo = ShellDetector.getDefaultShell();
+      const preferredShell = configManager.getPreferredShell();
+      const shellInfo = ShellDetector.getDefaultShell(preferredShell);
       shellPath = shellInfo.path;
       shellArgs = shellInfo.args || [];
     }

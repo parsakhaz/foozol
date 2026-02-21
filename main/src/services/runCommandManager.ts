@@ -8,6 +8,7 @@ import { ShellDetector } from '../utils/shellDetector';
 import * as os from 'os';
 import { exec } from 'child_process';
 import { promisify } from 'util';
+import { configManager } from './configManager';
 
 interface RunProcess {
   process: pty.IPty;
@@ -74,7 +75,8 @@ export class RunCommandManager extends EventEmitter {
             }
             
             // Get the user's default shell
-            const shellInfo = ShellDetector.getDefaultShell();
+            const preferredShell = configManager.getPreferredShell();
+            const shellInfo = ShellDetector.getDefaultShell(preferredShell);
             this.logger?.verbose(`Using shell: ${shellInfo.path} (${shellInfo.name})`);
             
             // Prepare command with environment variable
