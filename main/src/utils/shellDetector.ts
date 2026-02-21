@@ -103,8 +103,9 @@ export class ShellDetector {
       }
     }
 
-    // Fallback: check PATH
-    return this.findExecutable('bash.exe');
+    // No PATH fallback - bash.exe in PATH could be WSL launcher (C:\Windows\System32\bash.exe)
+    // which is not Git Bash. Users with non-standard Git installs can set GIT_INSTALL_ROOT.
+    return null;
   }
 
   private static detectUnixShell(): ShellInfo {
