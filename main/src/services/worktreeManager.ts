@@ -4,6 +4,7 @@ import { join } from 'path';
 import { mkdir } from 'fs/promises';
 import { getShellPath } from '../utils/shellPath';
 import { withLock } from '../utils/mutex';
+import { escapeShellArg } from '../utils/shellEscape';
 import type { ConfigManager } from './configManager';
 import type { AnalyticsManager } from './analyticsManager';
 import { WSLContext, posixJoin, wrapCommandForWSL, getWSLContextFromProject } from '../utils/wslUtils';
@@ -1033,7 +1034,9 @@ Co-Authored-By: foozol <noreply@foozol.com>` : commitMessage;
 
   async setUpstream(worktreePath: string, remoteBranch: string, wslContext?: WSLContext | null): Promise<{ output: string }> {
     try {
-      const { stdout, stderr } = await execForProject(`git branch --set-upstream-to=${remoteBranch}`, worktreePath, wslContext);
+      // Escape the remote branch name to prevent shell injection
+      const escapedBranch = escapeShellArg(remoteBranch);
+      const { stdout, stderr } = await execForProject(`git branch --set-upstream-to=${escapedBranch}`, worktreePath, wslContext);
       const output = stdout || stderr || `Tracking set to ${remoteBranch}`;
       return { output };
     } catch (error: unknown) {

@@ -460,11 +460,14 @@ export const SessionView = memo(() => {
   // Handler to open set tracking dialog
   const handleOpenSetTracking = async () => {
     if (!activeSession) return;
+    const sessionIdAtStart = activeSession.id;
     try {
       const [branchesResponse, upstreamResponse] = await Promise.all([
         API.sessions.getRemoteBranches(activeSession.id),
         API.sessions.getUpstream(activeSession.id)
       ]);
+      // Guard against stale responses if session changed during async call
+      if (activeSession.id !== sessionIdAtStart) return;
       if (branchesResponse.success && branchesResponse.data) {
         setRemoteBranches(branchesResponse.data);
       }
