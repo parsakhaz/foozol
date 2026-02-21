@@ -10,6 +10,7 @@ on:
 jobs:
   build:
     strategy:
+      fail-fast: false
       matrix:
         # Build both platforms for validation, but use different commands for speed
         os: [macos-latest, ubuntu-latest]
