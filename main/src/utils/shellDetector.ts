@@ -216,8 +216,8 @@ export class ShellDetector {
    * @param command The command to execute
    * @returns Array of arguments to pass to spawn/exec
    */
-  static getShellCommandArgs(command: string): { shell: string; args: string[] } {
-    const shellInfo = this.getDefaultShell();
+  static getShellCommandArgs(command: string, preferredShell?: string): { shell: string; args: string[] } {
+    const shellInfo = this.getDefaultShell(preferredShell);
 
     switch (shellInfo.name) {
       case 'cmd':

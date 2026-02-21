@@ -93,8 +93,8 @@ export class RunCommandManager extends EventEmitter {
               commandWithEnv = `export WORKTREE_PATH='${escapedWorktreePath}' && ${commandLine}`;
             }
             
-            // Get shell command arguments
-            const { shell, args: shellArgs } = ShellDetector.getShellCommandArgs(commandWithEnv);
+            // Get shell command arguments (pass preferred shell)
+            const { shell, args: shellArgs } = ShellDetector.getShellCommandArgs(commandWithEnv, preferredShell);
             
             this.logger?.verbose(`Using shell: ${shell}`);
             this.logger?.verbose(`Full command: ${commandWithEnv}`);
