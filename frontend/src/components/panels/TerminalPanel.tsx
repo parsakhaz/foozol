@@ -310,9 +310,9 @@ export const TerminalPanel: React.FC<TerminalPanelProps> = React.memo(({ panel, 
   }, [panel.id]); // Only depend on panel.id to prevent re-initialization on session switch
 
   // Handle visibility changes (resize and focus when becoming visible)
+  // Include isInitialized so this effect re-runs after terminal initialization completes
   useEffect(() => {
-    if (isActive && fitAddonRef.current && xtermRef.current) {
-      console.log('[TerminalPanel] Panel became active, fitting and focusing terminal');
+    if (isActive && isInitialized && fitAddonRef.current && xtermRef.current) {
       // Use requestAnimationFrame to ensure the DOM has reflowed after display: none -> block,
       // then fit. If the container still has tiny dimensions, retry after a longer delay.
       const fitTerminal = () => {
@@ -323,11 +323,14 @@ export const TerminalPanel: React.FC<TerminalPanelProps> = React.memo(({ panel, 
           window.electronAPI.invoke('terminal:resize', panel.id, dimensions.cols, dimensions.rows);
           // If cols are suspiciously small, the reflow hasn't happened yet — retry
           if (dimensions.cols < 20) {
-            console.log('[TerminalPanel] Cols too small after fit:', dimensions.cols, '- retrying');
             setTimeout(fitTerminal, 150);
           } else {
             // Focus the terminal once it's properly sized
             xtermRef.current?.focus();
+            // Re-focus after a short delay to handle any focus stealing from other components
+            setTimeout(() => {
+              xtermRef.current?.focus();
+            }, 50);
           }
         }
       };
@@ -335,7 +338,7 @@ export const TerminalPanel: React.FC<TerminalPanelProps> = React.memo(({ panel, 
         requestAnimationFrame(fitTerminal);
       });
     }
-  }, [isActive, panel.id]);
+  }, [isActive, panel.id, isInitialized]);
 
   useEffect(() => {
     if (!xtermRef.current) {
