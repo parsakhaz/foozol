@@ -31,6 +31,7 @@ import { PanelCreateOptions } from '../types/panelComponents';
 import { Download, Upload, GitMerge, Code2, Terminal, GripHorizontal, ChevronDown, ChevronUp, RefreshCw, Archive, ArchiveRestore, GitCommitHorizontal, Link } from 'lucide-react';
 import type { Project } from '../types/project';
 import { devLog, renderLog } from '../utils/console';
+import { cycleIndex } from '../utils/arrayUtils';
 
 export const SessionView = memo(() => {
   const { activeView, activeProjectId } = useNavigationStore();
@@ -53,8 +54,6 @@ export const SessionView = memo(() => {
     // Otherwise look in regular sessions
     return state.sessions.find(session => session.id === state.activeSessionId);
   });
-  
-  const setActiveSession = useSessionStore(state => state.setActiveSession);
 
   // Panel store state and actions
   const {
@@ -68,7 +67,7 @@ export const SessionView = memo(() => {
   } = usePanelStore();
   
   // History store for navigation
-  const { addToHistory, navigateBack, navigateForward } = useSessionHistoryStore();
+  const { addToHistory } = useSessionHistoryStore();
 
   // Load panels when session changes
   useEffect(() => {
@@ -195,41 +194,6 @@ export const SessionView = memo(() => {
     }
   }, [activeSession?.id, currentActivePanel?.id, addToHistory]);
 
-  // Keyboard shortcuts for navigating history
-  useHotkey({
-    id: 'navigate-back',
-    label: 'Navigate Back in Session History',
-    keys: 'alt+ArrowLeft',
-    category: 'navigation',
-    action: () => {
-      const previousEntry = navigateBack();
-      if (previousEntry) {
-        setActiveSession(previousEntry.sessionId);
-        setTimeout(() => {
-          setActivePanelInStore(previousEntry.sessionId, previousEntry.panelId);
-          panelApi.setActivePanel(previousEntry.sessionId, previousEntry.panelId);
-        }, 50);
-      }
-    },
-  });
-
-  useHotkey({
-    id: 'navigate-forward',
-    label: 'Navigate Forward in Session History',
-    keys: 'alt+ArrowRight',
-    category: 'navigation',
-    action: () => {
-      const nextEntry = navigateForward();
-      if (nextEntry) {
-        setActiveSession(nextEntry.sessionId);
-        setTimeout(() => {
-          setActivePanelInStore(nextEntry.sessionId, nextEntry.panelId);
-          panelApi.setActivePanel(nextEntry.sessionId, nextEntry.panelId);
-        }, 50);
-      }
-    },
-  });
-
   // Debug logging - only in development with verbose enabled
   renderLog('[SessionView] Session panels:', sessionPanels);
   renderLog('[SessionView] Active panel ID:', activePanels[activeSession?.id || '']);
@@ -262,6 +226,63 @@ export const SessionView = memo(() => {
     [activeSession, setActivePanelInStore, addToHistory]
   );
 
+  // Tab cycling: navigates between panels in the current session using
+  // keyboard shortcuts. Supports wrap-around (last → first). Only enabled
+  // when there are 2+ panels. Uses sortedSessionPanels to match tab bar order.
+  const cycleTab = useCallback((direction: 'next' | 'prev') => {
+    if (!activeSession || sortedSessionPanels.length < 2) return;
+
+    const currentIndex = sortedSessionPanels.findIndex(
+      p => p.id === currentActivePanel?.id
+    );
+    const nextIndex = cycleIndex(currentIndex, sortedSessionPanels.length, direction);
+    if (nextIndex === -1) return;
+
+    const nextPanel = sortedSessionPanels[nextIndex];
+    handlePanelSelect(nextPanel);
+  }, [activeSession, sortedSessionPanels, currentActivePanel, handlePanelSelect]);
+
+  // Tab cycling hotkeys - primary shortcuts show in palette, alternatives are hidden
+  useHotkey({
+    id: 'cycle-tab-prev-arrow',
+    label: 'Previous Tab',
+    keys: 'alt+ArrowLeft',
+    category: 'tabs',
+    enabled: () => sortedSessionPanels.length > 1,
+    action: () => cycleTab('prev'),
+    showInPalette: true,
+  });
+
+  useHotkey({
+    id: 'cycle-tab-next-arrow',
+    label: 'Next Tab',
+    keys: 'alt+ArrowRight',
+    category: 'tabs',
+    enabled: () => sortedSessionPanels.length > 1,
+    action: () => cycleTab('next'),
+    showInPalette: true,
+  });
+
+  useHotkey({
+    id: 'cycle-tab-prev-a',
+    label: 'Previous Tab',
+    keys: 'mod+a',
+    category: 'tabs',
+    enabled: () => sortedSessionPanels.length > 1,
+    action: () => cycleTab('prev'),
+    showInPalette: false, // Hidden alternative
+  });
+
+  useHotkey({
+    id: 'cycle-tab-next-d',
+    label: 'Next Tab',
+    keys: 'mod+d',
+    category: 'tabs',
+    enabled: () => sortedSessionPanels.length > 1,
+    action: () => cycleTab('next'),
+    showInPalette: false, // Hidden alternative
+  });
+
   // Alt+1 through Alt+9 to switch between panel tabs
   const panelLabel = (i: number) => {
     const p = sortedSessionPanels[i];
@@ -279,11 +300,11 @@ export const SessionView = memo(() => {
   useHotkey({ id: 'panel-tab-8', label: panelLabel(7), keys: 'alt+8', category: 'tabs', enabled: () => !!sortedSessionPanels[7], action: () => { const p = sortedSessionPanels[7]; if (p) handlePanelSelect(p); } });
   useHotkey({ id: 'panel-tab-9', label: panelLabel(8), keys: 'alt+9', category: 'tabs', enabled: () => !!sortedSessionPanels[8], action: () => { const p = sortedSessionPanels[8]; if (p) handlePanelSelect(p); } });
 
-  // Ctrl+W: close active panel tab (skip permanent panels like diff)
+  // Ctrl+Q: close active panel tab (skip permanent panels like diff)
   useHotkey({
     id: 'close-active-tab',
     label: 'Close active tab',
-    keys: 'mod+w',
+    keys: 'mod+q',
     category: 'tabs',
     enabled: () => {
       if (!currentActivePanel) return false;

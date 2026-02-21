@@ -113,8 +113,8 @@ export const TerminalPanel: React.FC<TerminalPanelProps> = React.memo(({ panel, 
           if (ctrlOrMeta && e.key >= '1' && e.key <= '9') return false;
           // Alt+1-9: switch panel tabs
           if (e.altKey && e.key >= '1' && e.key <= '9') return false;
-          // Ctrl/Cmd+W: close active tab
-          if (ctrlOrMeta && e.key.toLowerCase() === 'w') return false;
+          // Ctrl/Cmd+Q: close active tab
+          if (ctrlOrMeta && e.key.toLowerCase() === 'q') return false;
           // Ctrl/Cmd+K: command palette
           if (ctrlOrMeta && e.key.toLowerCase() === 'k') return false;
           // Ctrl/Cmd+P: prompt history
@@ -125,6 +125,17 @@ export const TerminalPanel: React.FC<TerminalPanelProps> = React.memo(({ panel, 
           if (ctrlOrMeta && e.shiftKey && e.key.toLowerCase() === 'd') return false;
           // Ctrl/Cmd+Shift+R: toggle run
           if (ctrlOrMeta && e.shiftKey && e.key.toLowerCase() === 'r') return false;
+
+          // Session cycling - Tab
+          if (ctrlOrMeta && e.key === 'Tab') return false;
+          // Session cycling - arrows (Ctrl+arrows)
+          if (ctrlOrMeta && (e.key === 'ArrowUp' || e.key === 'ArrowDown')) return false;
+          // Session cycling - W/S
+          if (ctrlOrMeta && (e.key.toLowerCase() === 'w' || e.key.toLowerCase() === 's')) return false;
+          // Tab cycling - Alt+arrows
+          if (e.altKey && ['ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight'].includes(e.key)) return false;
+          // Tab cycling - A/D
+          if (ctrlOrMeta && (e.key.toLowerCase() === 'a' || e.key.toLowerCase() === 'd')) return false;
 
           return true; // Let terminal handle everything else
         });

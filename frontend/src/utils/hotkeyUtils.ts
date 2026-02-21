@@ -1,3 +1,15 @@
+/**
+ * Utility functions for displaying and organizing keyboard shortcuts.
+ *
+ * Provides:
+ * - Platform-aware key display formatting (⌘ on Mac, Ctrl on Windows)
+ * - Category ordering for consistent Help dialog presentation
+ * - Human-readable labels for hotkey categories
+ *
+ * Used by CommandPalette and Help components to present shortcuts to users.
+ *
+ * @module hotkeyUtils
+ */
 import type { HotkeyDefinition } from '../stores/hotkeyStore';
 
 /** Canonical display order for hotkey categories */
@@ -29,6 +41,7 @@ export function formatKeyDisplay(keys: string): string {
       case 'arrowright': return '→';
       case 'arrowup': return '↑';
       case 'arrowdown': return '↓';
+      case 'tab': return 'Tab';
       default: return part.length === 1 ? part.toUpperCase() : part;
     }
   });

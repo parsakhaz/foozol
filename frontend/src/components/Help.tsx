@@ -10,6 +10,7 @@ function KeyboardShortcutsSection() {
     () =>
       Array.from(hotkeys.values())
         .filter((def) => !def.devOnly || process.env.NODE_ENV === 'development')
+        .filter((def) => def.showInPalette !== false)
         .filter((h) => !h.enabled || h.enabled()),
     [hotkeys]
   );
