@@ -49,11 +49,20 @@ export const TerminalPanel: React.FC<TerminalPanelProps> = React.memo(({ panel, 
   }
 
   // Terminal link handling hook
-  const { onMouseMove, renderOverlays } = useTerminalLinks(xtermRef.current, {
+  const {
+    onMouseMove,
+    tooltip,
+    filePopover,
+    selectionPopover,
+    handleOpenInEditor,
+    handleShowInExplorer,
+    closeTooltip,
+    closeFilePopover,
+    closeSelectionPopover,
+  } = useTerminalLinks(xtermRef.current, {
     workingDirectory: workingDirectory || '',
     sessionId: sessionId || panel.sessionId,
   });
-  const overlays = renderOverlays();
 
   // Initialize terminal only once when component first mounts
   // Keep it alive even when switching sessions
@@ -457,26 +466,26 @@ export const TerminalPanel: React.FC<TerminalPanelProps> = React.memo(({ panel, 
 
       {/* Terminal link overlays */}
       <TerminalLinkTooltip
-        visible={overlays.tooltip.visible}
-        x={overlays.tooltip.x}
-        y={overlays.tooltip.y}
-        linkText={overlays.tooltip.text}
-        hint={overlays.tooltip.hint}
+        visible={tooltip.visible}
+        x={tooltip.x}
+        y={tooltip.y}
+        linkText={tooltip.text}
+        hint={tooltip.hint}
       />
 
       <TerminalPopover
-        visible={overlays.filePopover.visible}
-        x={overlays.filePopover.x}
-        y={overlays.filePopover.y}
-        onClose={overlays.closeFilePopover}
+        visible={filePopover.visible}
+        x={filePopover.x}
+        y={filePopover.y}
+        onClose={closeFilePopover}
       >
-        <PopoverButton onClick={overlays.handleOpenInEditor}>
+        <PopoverButton onClick={handleOpenInEditor}>
           <span className="flex items-center gap-2">
             <FileEdit className="w-4 h-4" />
             Open in Editor
           </span>
         </PopoverButton>
-        <PopoverButton onClick={overlays.handleShowInExplorer}>
+        <PopoverButton onClick={handleShowInExplorer}>
           <span className="flex items-center gap-2">
             <FolderOpen className="w-4 h-4" />
             Show in Explorer
@@ -485,12 +494,12 @@ export const TerminalPanel: React.FC<TerminalPanelProps> = React.memo(({ panel, 
       </TerminalPopover>
 
       <SelectionPopover
-        visible={overlays.selectionPopover.visible}
-        x={overlays.selectionPopover.x}
+        visible={selectionPopover.visible}
+        x={selectionPopover.x}
+        y={selectionPopover.y}
+        text={selectionPopover.text}
         workingDirectory={workingDirectory}
-        y={overlays.selectionPopover.y}
-        text={overlays.selectionPopover.text}
-        onClose={overlays.closeSelectionPopover}
+        onClose={closeSelectionPopover}
       />
     </div>
   );

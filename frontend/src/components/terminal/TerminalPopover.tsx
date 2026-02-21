@@ -1,3 +1,14 @@
+/**
+ * Terminal-specific popover for xterm.js link actions.
+ *
+ * This is a specialized version of ui/Dropdown.tsx for terminal overlays.
+ * We cannot use the standard Dropdown because:
+ * 1. xterm.js provides raw MouseEvent coordinates, not React elements to anchor to
+ * 2. Terminal links are registered via ILinkProvider API, not as React components
+ * 3. Position must be calculated from absolute viewport coordinates
+ *
+ * For standard UI dropdowns anchored to React elements, use ui/Dropdown.tsx instead.
+ */
 import React, { useRef, useEffect, useState, useLayoutEffect } from 'react';
 import { createPortal } from 'react-dom';
 import { cn } from '../../utils/cn';

@@ -1,3 +1,14 @@
+/**
+ * Terminal-specific tooltip for xterm.js link hover.
+ *
+ * This is a specialized version of ui/Tooltip.tsx for terminal links.
+ * We cannot use the standard Tooltip because:
+ * 1. xterm.js provides raw MouseEvent coordinates, not React elements to wrap
+ * 2. Terminal links are registered via ILinkProvider API, not as React components
+ * 3. Position must be calculated from absolute viewport coordinates
+ *
+ * For standard UI tooltips wrapping React elements, use ui/Tooltip.tsx instead.
+ */
 import React, { useLayoutEffect, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { cn } from '../../utils/cn';

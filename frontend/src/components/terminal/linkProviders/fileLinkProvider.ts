@@ -1,5 +1,6 @@
 import type { ILink, ILinkProvider } from '@xterm/xterm';
 import type { LinkProviderConfig } from './types';
+import { isMac, isWindows, getModifierKeyName } from '../../../utils/platformUtils';
 
 /**
  * Creates a file link provider that detects file paths in terminal output.
@@ -39,8 +40,7 @@ export function createFileLinkProvider(config: LinkProviderConfig): ILinkProvide
     // Resolve relative to working directory
     const resolved = `${config.workingDirectory}/${filePath}`.replace(/\/+/g, '/');
     // Handle Windows path separators - only convert on Windows
-    const isWindows = navigator.platform.toLowerCase().includes('win');
-    return isWindows ? resolved.replace(/\//g, '\\') : resolved;
+    return isWindows() ? resolved.replace(/\//g, '\\') : resolved;
   }
 
   return {
@@ -63,10 +63,8 @@ export function createFileLinkProvider(config: LinkProviderConfig): ILinkProvide
           const rawPath = match[1] || match[0];
           const { path, line: fileLine } = parseFilePath(rawPath);
           const resolvedPath = resolvePath(path);
-
-          // Detect platform for modifier key hint
-          const isMac = navigator.platform.toUpperCase().includes('MAC');
-          const modifierKey = isMac ? 'Cmd' : 'Ctrl';
+          const isMacPlatform = isMac();
+          const modifierKey = getModifierKeyName();
 
           links.push({
             range: {
@@ -76,7 +74,7 @@ export function createFileLinkProvider(config: LinkProviderConfig): ILinkProvide
             text: rawPath,
             activate: (event: MouseEvent) => {
               // Only activate on Ctrl/Cmd+Click
-              if (isMac ? event.metaKey : event.ctrlKey) {
+              if (isMacPlatform ? event.metaKey : event.ctrlKey) {
                 config.onShowFilePopover(event, resolvedPath, fileLine);
               }
             },

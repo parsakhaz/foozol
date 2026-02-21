@@ -1,5 +1,6 @@
 import type { ILink, ILinkProvider } from '@xterm/xterm';
 import type { LinkProviderConfig } from './types';
+import { isMac, getModifierKeyName } from '../../../utils/platformUtils';
 
 /**
  * Creates a git link provider that detects git SHAs and issue references.
@@ -31,9 +32,8 @@ export function createGitLinkProvider(config: LinkProviderConfig): ILinkProvider
       const text = line.translateToString();
       const links: ILink[] = [];
 
-      // Detect platform for modifier key hint
-      const isMac = navigator.platform.toUpperCase().includes('MAC');
-      const modifierKey = isMac ? 'Cmd' : 'Ctrl';
+      const isMacPlatform = isMac();
+      const modifierKey = getModifierKeyName();
 
       // Match Git SHAs
       GIT_SHA.lastIndex = 0;
@@ -50,7 +50,7 @@ export function createGitLinkProvider(config: LinkProviderConfig): ILinkProvider
           text: sha,
           activate: (event: MouseEvent) => {
             // Only activate on Ctrl/Cmd+Click
-            if (isMac ? event.metaKey : event.ctrlKey) {
+            if (isMacPlatform ? event.metaKey : event.ctrlKey) {
               config.onOpenUrl(commitUrl);
             }
           },
@@ -78,7 +78,7 @@ export function createGitLinkProvider(config: LinkProviderConfig): ILinkProvider
           text: `#${issueNumber}`,
           activate: (event: MouseEvent) => {
             // Only activate on Ctrl/Cmd+Click
-            if (isMac ? event.metaKey : event.ctrlKey) {
+            if (isMacPlatform ? event.metaKey : event.ctrlKey) {
               config.onOpenUrl(issueUrl);
             }
           },
@@ -107,7 +107,7 @@ export function createGitLinkProvider(config: LinkProviderConfig): ILinkProvider
           text: `${repo}#${issueNumber}`,
           activate: (event: MouseEvent) => {
             // Only activate on Ctrl/Cmd+Click
-            if (isMac ? event.metaKey : event.ctrlKey) {
+            if (isMacPlatform ? event.metaKey : event.ctrlKey) {
               config.onOpenUrl(crossRepoUrl);
             }
           },

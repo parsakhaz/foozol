@@ -161,17 +161,27 @@ export function useTerminalLinks(terminal: Terminal | null, config: UseTerminalL
     setFilePopover((prev) => ({ ...prev, visible: false }));
   }, [filePopover]);
 
+  const closeTooltip = useCallback(() => {
+    setTooltip((prev) => ({ ...prev, visible: false }));
+  }, []);
+
+  const closeFilePopover = useCallback(() => {
+    setFilePopover((prev) => ({ ...prev, visible: false }));
+  }, []);
+
+  const closeSelectionPopover = useCallback(() => {
+    setSelectionPopover((prev) => ({ ...prev, visible: false }));
+  }, []);
+
   return {
     onMouseMove,
-    renderOverlays: () => ({
-      tooltip,
-      filePopover,
-      selectionPopover,
-      handleOpenInEditor,
-      handleShowInExplorer,
-      closeTooltip: () => setTooltip((prev) => ({ ...prev, visible: false })),
-      closeFilePopover: () => setFilePopover((prev) => ({ ...prev, visible: false })),
-      closeSelectionPopover: () => setSelectionPopover((prev) => ({ ...prev, visible: false })),
-    }),
+    tooltip,
+    filePopover,
+    selectionPopover,
+    handleOpenInEditor,
+    handleShowInExplorer,
+    closeTooltip,
+    closeFilePopover,
+    closeSelectionPopover,
   };
 }

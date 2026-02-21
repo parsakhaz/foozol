@@ -1,6 +1,7 @@
 import React from 'react';
 import { Copy, ExternalLink, FolderOpen } from 'lucide-react';
-import { TerminalPopover } from './TerminalPopover';
+import { TerminalPopover, PopoverButton } from './TerminalPopover';
+import { isWindows } from '../../utils/platformUtils';
 
 export interface SelectionPopoverProps {
   visible: boolean;
@@ -17,7 +18,7 @@ const URL_PATTERN = /https?:\/\/[^\s<>"{}|\\^`[\]]+/;
 const FILE_PATH_PATTERNS = [
   /^[.~]?\/[\w\-./]+/, // Unix absolute or relative paths starting with / ./ ~/
   /^[A-Za-z]:[\\\/][\w\-.\\/]+/, // Windows absolute paths C:\ or C:/
-  /^[\w\-./]+\.[a-z]{1,10}(:\d+)?$/i, // Relative paths with extension like foo.ts or foo.ts:42
+  /^[\w\-./\\]+\.[a-z]{1,10}(:\d+)?$/i, // Relative paths with extension like foo.ts, foo.ts:42, or dir\foo.ts
 ];
 
 function isFilePath(text: string): boolean {
@@ -37,9 +38,11 @@ function resolveFilePath(text: string, workingDirectory?: string): string {
 
   // Resolve relative to working directory
   if (workingDirectory) {
-    const resolved = `${workingDirectory}/${pathOnly}`.replace(/\/+/g, '/');
-    const isWindows = navigator.platform.toLowerCase().includes('win');
-    return isWindows ? resolved.replace(/\//g, '\\') : resolved;
+    const separator = isWindows() ? '\\' : '/';
+    // Normalize path separators to the platform's separator
+    const normalizedPath = pathOnly.replace(/[/\\]/g, separator);
+    const normalizedDir = workingDirectory.replace(/[/\\]/g, separator);
+    return `${normalizedDir}${separator}${normalizedPath}`;
   }
 
   return pathOnly;
@@ -53,6 +56,9 @@ export const SelectionPopover: React.FC<SelectionPopoverProps> = ({
   workingDirectory,
   onClose,
 }) => {
+  // Early return when not visible to avoid unnecessary computation
+  if (!visible) return null;
+
   const trimmedText = text.trim();
   const isUrl = URL_PATTERN.test(trimmedText);
   const isFile = !isUrl && isFilePath(trimmedText);
@@ -87,30 +93,27 @@ export const SelectionPopover: React.FC<SelectionPopoverProps> = ({
 
   return (
     <TerminalPopover visible={visible} x={x} y={y} onClose={onClose}>
-      <button
-        onClick={handleCopy}
-        className="w-full px-3 py-2 text-left text-sm text-text-secondary hover:bg-interactive/10 hover:text-text-primary flex items-center gap-2 transition-colors"
-      >
-        <Copy className="w-4 h-4" />
-        <span>Copy</span>
-      </button>
+      <PopoverButton onClick={handleCopy}>
+        <span className="flex items-center gap-2">
+          <Copy className="w-4 h-4" />
+          Copy
+        </span>
+      </PopoverButton>
       {isUrl && (
-        <button
-          onClick={handleOpenUrl}
-          className="w-full px-3 py-2 text-left text-sm text-text-secondary hover:bg-interactive/10 hover:text-text-primary flex items-center gap-2 transition-colors"
-        >
-          <ExternalLink className="w-4 h-4" />
-          <span>Open URL</span>
-        </button>
+        <PopoverButton onClick={handleOpenUrl}>
+          <span className="flex items-center gap-2">
+            <ExternalLink className="w-4 h-4" />
+            Open URL
+          </span>
+        </PopoverButton>
       )}
       {isFile && (
-        <button
-          onClick={handleShowInExplorer}
-          className="w-full px-3 py-2 text-left text-sm text-text-secondary hover:bg-interactive/10 hover:text-text-primary flex items-center gap-2 transition-colors"
-        >
-          <FolderOpen className="w-4 h-4" />
-          <span>Show in Explorer</span>
-        </button>
+        <PopoverButton onClick={handleShowInExplorer}>
+          <span className="flex items-center gap-2">
+            <FolderOpen className="w-4 h-4" />
+            Show in Explorer
+          </span>
+        </PopoverButton>
       )}
     </TerminalPopover>
   );
