@@ -132,3 +132,37 @@ jobs:
         if-no-files-found: error
         retention-days: 30
 
+  build-windows:
+    runs-on: windows-latest
+    permissions:
+      contents: write
+    steps:
+    - uses: actions/checkout@v4
+    - uses: pnpm/action-setup@v4
+    - uses: actions/setup-node@v4
+      with:
+        node-version: '22.15.1'
+        cache: 'pnpm'
+    - name: Cache Electron binaries
+      uses: actions/cache@v4
+      with:
+        path: |
+          ~/AppData/Local/electron/Cache
+          ~/AppData/Local/electron-builder/Cache
+        key: windows-electron-${{ hashFiles('**/pnpm-lock.yaml') }}
+        restore-keys: windows-electron-
+    - run: pnpm install
+    - name: Build Windows (x64 + ARM64)
+      run: pnpm run build:win
+      env:
+        GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+    - run: dir dist-electron
+    - uses: actions/upload-artifact@v4
+      with:
+        name: foozol-windows-canary
+        path: |
+          dist-electron/*.exe
+          dist-electron/latest.yml
+        if-no-files-found: error
+        retention-days: 30
+

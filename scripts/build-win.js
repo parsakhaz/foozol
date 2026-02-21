@@ -6,10 +6,11 @@
  * particularly dealing with pnpm + node-gyp compatibility issues.
  *
  * Usage:
- *   node scripts/build-win.js [arch]
+ *   node scripts/build-win.js [arch] [--publish]
  *
  * Arguments:
- *   arch - Target architecture: 'x64', 'arm64', or 'both' (default: 'x64')
+ *   arch      - Target architecture: 'x64', 'arm64', or 'both' (default: 'x64')
+ *   --publish - Use '--publish always' instead of '--publish never' (for CI releases)
  *
  * What this script does:
  * 1. Patches winpty.gyp to fix batch file path issues on Windows
@@ -31,7 +32,9 @@ const ROOT_DIR = path.resolve(__dirname, '..');
 const NODE_MODULES = path.join(ROOT_DIR, 'node_modules');
 
 // Parse command line arguments
-const arch = process.argv[2] || 'x64';
+const shouldPublish = process.argv.includes('--publish');
+const args = process.argv.slice(2).filter(a => a !== '--publish');
+const arch = args[0] || 'x64';
 if (!['x64', 'arm64', 'both'].includes(arch)) {
   console.error('Invalid architecture. Use: x64, arm64, or both');
   process.exit(1);
@@ -331,7 +334,8 @@ async function build() {
   // but node-pty still needs native compilation. The flag is safe because pnpm install already built the
   // native modules for the host platform.
   const archFlag = arch === 'both' ? '' : `--${arch}`;
-  run(`pnpm exec electron-builder --win ${archFlag} --publish never --config.npmRebuild=false`);
+  const publishFlag = shouldPublish ? '--publish always' : '--publish never';
+  run(`pnpm exec electron-builder --win ${archFlag} ${publishFlag} --config.npmRebuild=false`);
 
   console.log('\n✅ Build complete!\n');
   console.log('Output files are in: dist-electron/');
