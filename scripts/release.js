@@ -3,25 +3,43 @@ const { execSync } = require('child_process');
 const fs = require('fs');
 const path = require('path');
 
-const version = process.argv[2];
-if (!version) {
-  console.error('Usage: node scripts/release.js <version>');
-  console.error('Example: node scripts/release.js 0.1.0');
-  process.exit(1);
-}
-
-// Strip leading 'v' if present
-const cleanVersion = version.replace(/^v/, '');
-
-// Validate semver format
-if (!/^\d+\.\d+\.\d+/.test(cleanVersion)) {
-  console.error(`Invalid version format: ${cleanVersion}`);
-  process.exit(1);
-}
-
 const rootDir = path.resolve(__dirname, '..');
 const pkgPath = path.join(rootDir, 'package.json');
 const pkg = JSON.parse(fs.readFileSync(pkgPath, 'utf8'));
+
+const input = process.argv[2];
+if (!input) {
+  console.error('Usage: node scripts/release.js <patch|minor|major|version>');
+  console.error('Examples:');
+  console.error('  node scripts/release.js patch   # 0.0.2 -> 0.0.3');
+  console.error('  node scripts/release.js minor   # 0.0.2 -> 0.1.0');
+  console.error('  node scripts/release.js major   # 0.0.2 -> 1.0.0');
+  console.error('  node scripts/release.js 0.1.0   # explicit version');
+  process.exit(1);
+}
+
+let cleanVersion;
+
+if (['patch', 'minor', 'major'].includes(input)) {
+  const parts = pkg.version.split('.').map(Number);
+  if (input === 'patch') {
+    parts[2]++;
+  } else if (input === 'minor') {
+    parts[1]++;
+    parts[2] = 0;
+  } else if (input === 'major') {
+    parts[0]++;
+    parts[1] = 0;
+    parts[2] = 0;
+  }
+  cleanVersion = parts.join('.');
+} else {
+  cleanVersion = input.replace(/^v/, '');
+  if (!/^\d+\.\d+\.\d+$/.test(cleanVersion)) {
+    console.error(`Invalid version format: ${cleanVersion}`);
+    process.exit(1);
+  }
+}
 
 console.log(`Releasing v${cleanVersion} (was ${pkg.version})...`);
 
