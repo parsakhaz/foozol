@@ -26,14 +26,9 @@ jobs:
       run: pnpm run release:mac:universal
       env:
         GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        # Code signing - only set when secrets are configured
-        CSC_LINK: ${{ secrets.APPLE_CERTIFICATE || '' }}
-        CSC_KEY_PASSWORD: ${{ secrets.APPLE_CERTIFICATE_PASSWORD || '' }}
-        APPLE_ID: ${{ secrets.APPLE_ID || '' }}
-        APPLE_APP_SPECIFIC_PASSWORD: ${{ secrets.APPLE_APP_PASSWORD || '' }}
-        APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID || '' }}
-        # Disable signing when no certificate is available
+        # Disable code signing until certificates are configured
         CSC_IDENTITY_AUTO_DISCOVERY: 'false'
+        CSC_DISABLE: 'true'
     - run: ls -la dist-electron/
     - uses: actions/upload-artifact@v4
       with:
