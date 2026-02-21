@@ -27,21 +27,6 @@
   --red-500: rgb(239 68 68);
   --red-600: rgb(220 38 38);
 
-  /* Brand Colors */
-  --discord-primary: #5865F2;
-  --discord-hover: #4752C4;
-  --discord-secondary: #7289DA;
-
-  /* Light Theme Brand Colors - Soft Lilac/Purple Accent */
-  --lilac-50: rgb(250 248 255);   /* Very light lilac for backgrounds */
-  --lilac-100: rgb(243 239 255);  /* Light lilac for surface */
-  --lilac-200: rgb(229 219 255);  /* Soft lilac for hover states */
-  --lilac-300: rgb(202 182 255);  /* Medium lilac for borders */
-  --lilac-400: rgb(167 139 250);  /* Vibrant lilac for interactive */
-  --lilac-500: rgb(139 103 246);  /* Primary brand lilac */
-  --lilac-600: rgb(124 79 243);   /* Hover state */
-  --lilac-700: rgb(104 56 235);   /* Active/pressed state */
-
   /* GitHub Dark palette - rich OLED blacks */
   --gh-black: rgb(1 4 9);         /* True OLED black */
   --gh-900: rgb(13 17 23);        /* GitHub dark default bg */
