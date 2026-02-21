@@ -1,3 +1,16 @@
+/**
+ * HomePage Component
+ *
+ * Landing page displayed when no session is selected. Provides quick access to:
+ * - Theme toggle (dark/light mode)
+ * - UI scale adjustment
+ * - Terminal shell preference (Windows only)
+ * - List of active sessions (running/waiting)
+ *
+ * Replaces the previous EmptyState component to provide a more functional
+ * default view that allows users to configure settings without opening
+ * the full Settings dialog.
+ */
 import { useState, useEffect } from 'react';
 import { Sun, Moon, ChevronUp, ChevronDown, Terminal } from 'lucide-react';
 import { useTheme } from '../contexts/ThemeContext';
@@ -23,15 +36,24 @@ export function HomePage() {
 
   // Fetch platform and available shells on mount
   useEffect(() => {
-    window.electronAPI.getPlatform().then(async (p) => {
-      setPlatform(p);
-      if (p === 'win32') {
-        const shellsResponse = await API.config.getAvailableShells();
-        if (shellsResponse.success) {
-          setAvailableShells(shellsResponse.data);
+    window.electronAPI
+      .getPlatform()
+      .then(async (p) => {
+        setPlatform(p);
+        if (p === 'win32') {
+          try {
+            const shellsResponse = await API.config.getAvailableShells();
+            if (shellsResponse.success) {
+              setAvailableShells(shellsResponse.data);
+            }
+          } catch (error) {
+            console.error('Failed to fetch available shells:', error);
+          }
         }
-      }
-    });
+      })
+      .catch((error) => {
+        console.error('Failed to get platform:', error);
+      });
   }, []);
 
   // Sync preferredShell with config
