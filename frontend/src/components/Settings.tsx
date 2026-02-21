@@ -16,7 +16,9 @@ import {
   FileText,
   Eye,
   BarChart3,
-  Activity
+  Activity,
+  ChevronUp,
+  ChevronDown
 } from 'lucide-react';
 import { Input, Textarea, Checkbox } from './ui/Input';
 import { Button } from './ui/Button';
@@ -259,26 +261,41 @@ export function Settings({ isOpen, onClose }: SettingsProps) {
                 icon={<Eye className="w-4 h-4" />}
               >
                 <div className="space-y-3">
-                  <div className="flex items-center gap-4">
-                    <input
-                      type="range"
-                      min="0.75"
-                      max="1.5"
-                      step="0.05"
-                      value={uiScale}
-                      onChange={(e) => {
-                        const value = parseFloat(e.target.value);
-                        setUiScale(value);
-                        API.config.update({ uiScale: value });
+                  <div className="flex items-center gap-3">
+                    <button
+                      type="button"
+                      onClick={() => {
+                        const newScale = Math.round((uiScale - 0.1) * 10) / 10;
+                        if (newScale >= 0.8) {
+                          setUiScale(newScale);
+                          API.config.update({ uiScale: newScale });
+                        }
                       }}
-                      className="flex-1 accent-interactive"
-                    />
-                    <span className="text-sm font-medium text-text-primary w-12 text-right">
-                      {Math.round(uiScale * 100)}%
+                      disabled={uiScale <= 0.8}
+                      className="p-1.5 rounded-md bg-surface-tertiary hover:bg-surface-hover disabled:opacity-40 disabled:cursor-not-allowed"
+                    >
+                      <ChevronDown className="w-4 h-4" />
+                    </button>
+                    <span className="text-sm font-medium text-text-primary w-12 text-center">
+                      {uiScale.toFixed(1)}x
                     </span>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        const newScale = Math.round((uiScale + 0.1) * 10) / 10;
+                        if (newScale <= 1.5) {
+                          setUiScale(newScale);
+                          API.config.update({ uiScale: newScale });
+                        }
+                      }}
+                      disabled={uiScale >= 1.5}
+                      className="p-1.5 rounded-md bg-surface-tertiary hover:bg-surface-hover disabled:opacity-40 disabled:cursor-not-allowed"
+                    >
+                      <ChevronUp className="w-4 h-4" />
+                    </button>
                   </div>
                   <div className="flex gap-2">
-                    {[0.75, 1.0, 1.25, 1.5].map((preset) => (
+                    {[0.8, 1.0, 1.2, 1.5].map((preset) => (
                       <button
                         key={preset}
                         type="button"
@@ -292,7 +309,7 @@ export function Settings({ isOpen, onClose }: SettingsProps) {
                             : 'bg-surface-secondary text-text-secondary border-border-secondary hover:bg-surface-hover'
                         }`}
                       >
-                        {Math.round(preset * 100)}%
+                        {preset.toFixed(1)}x
                       </button>
                     ))}
                   </div>

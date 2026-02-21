@@ -3,9 +3,8 @@ import { useSessionStore } from '../stores/sessionStore';
 import { useNavigationStore } from '../stores/navigationStore';
 import { useSessionHistoryStore } from '../stores/sessionHistoryStore';
 import { useHotkey } from '../hooks/useHotkey';
-import { EmptyState } from './EmptyState';
+import { HomePage } from './HomePage';
 // import CombinedDiffView from './panels/diff/CombinedDiffView'; // Removed - now in panels
-import { Inbox } from 'lucide-react';
 import '@xterm/xterm/css/xterm.css';
 import { useSessionView } from '../hooks/useSessionView';
 import { DetailPanel } from './DetailPanel';
@@ -717,16 +716,7 @@ export const SessionView = memo(() => {
   }
 
   if (!activeSession) {
-    return (
-      <div className="flex-1 flex flex-col overflow-hidden bg-bg-primary">
-        <EmptyState
-          icon={Inbox}
-          title="No Session Selected"
-          description="Select a session from the sidebar to view its output, or create a new session to get started."
-          className="flex-1"
-        />
-      </div>
-    );
+    return <HomePage />;
   }
   
   return (
