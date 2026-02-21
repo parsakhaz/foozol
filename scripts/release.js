@@ -33,7 +33,8 @@ fs.writeFileSync(pkgPath, JSON.stringify(pkg, null, 2) + '\n');
 execSync('git add package.json', { cwd: rootDir, stdio: 'inherit' });
 execSync(`git commit -m "release: v${cleanVersion}"`, { cwd: rootDir, stdio: 'inherit' });
 execSync(`git tag v${cleanVersion}`, { cwd: rootDir, stdio: 'inherit' });
-execSync('git push origin HEAD --follow-tags', { cwd: rootDir, stdio: 'inherit' });
+execSync('git push origin HEAD', { cwd: rootDir, stdio: 'inherit' });
+execSync(`git push origin v${cleanVersion}`, { cwd: rootDir, stdio: 'inherit' });
 
 console.log(`\nRelease v${cleanVersion} triggered!`);
 console.log('Watch progress at: https://github.com/parsakhaz/foozol/actions');
