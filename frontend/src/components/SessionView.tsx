@@ -31,6 +31,7 @@ import { PanelCreateOptions } from '../types/panelComponents';
 import { Download, Upload, GitMerge, Code2, Terminal, GripHorizontal, ChevronDown, ChevronUp, RefreshCw, Archive, ArchiveRestore, GitCommitHorizontal, Link } from 'lucide-react';
 import type { Project } from '../types/project';
 import { devLog, renderLog } from '../utils/console';
+import { cycleIndex } from '../utils/arrayUtils';
 
 export const SessionView = memo(() => {
   const { activeView, activeProjectId } = useNavigationStore();
@@ -225,22 +226,17 @@ export const SessionView = memo(() => {
     [activeSession, setActivePanelInStore, addToHistory]
   );
 
-  // Tab cycling function
+  // Tab cycling: navigates between panels in the current session using
+  // keyboard shortcuts. Supports wrap-around (last → first). Only enabled
+  // when there are 2+ panels. Uses sortedSessionPanels to match tab bar order.
   const cycleTab = useCallback((direction: 'next' | 'prev') => {
     if (!activeSession || sortedSessionPanels.length < 2) return;
 
     const currentIndex = sortedSessionPanels.findIndex(
       p => p.id === currentActivePanel?.id
     );
-
-    let nextIndex: number;
-    if (currentIndex === -1) {
-      nextIndex = 0;
-    } else if (direction === 'next') {
-      nextIndex = (currentIndex + 1) % sortedSessionPanels.length;
-    } else {
-      nextIndex = (currentIndex - 1 + sortedSessionPanels.length) % sortedSessionPanels.length;
-    }
+    const nextIndex = cycleIndex(currentIndex, sortedSessionPanels.length, direction);
+    if (nextIndex === -1) return;
 
     const nextPanel = sortedSessionPanels[nextIndex];
     handlePanelSelect(nextPanel);

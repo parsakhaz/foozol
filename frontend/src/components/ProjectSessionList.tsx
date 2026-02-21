@@ -13,6 +13,7 @@ import { FieldWithTooltip } from './ui/FieldWithTooltip';
 import { Card } from './ui/Card';
 import { TogglePillImproved } from './ui/TogglePillImproved';
 import { API } from '../utils/api';
+import { cycleIndex } from '../utils/arrayUtils';
 import type { Session, GitStatus } from '../types/session';
 import type { Project, CreateProjectRequest } from '../types/project';
 
@@ -189,22 +190,17 @@ export function ProjectSessionList({ sessionSortAscending }: ProjectSessionListP
     return () => ids.forEach(id => unregister(id));
   }, [register, unregister, sessionLabelKey]);
 
-  // Session cycling function
+  // Session cycling: navigates to next/prev session across ALL active sessions
+  // (not just visible ones from expanded projects). Auto-expands collapsed
+  // projects when cycling to their sessions so users can see the selection.
   const cycleSession = useCallback((direction: 'next' | 'prev') => {
     const sessions = allActiveSessionsRef.current;
     if (sessions.length === 0) return;
 
     const currentId = activeSessionIdRef.current;
     const currentIndex = sessions.findIndex(s => s.id === currentId);
-
-    let nextIndex: number;
-    if (currentIndex === -1) {
-      nextIndex = 0; // No active session, go to first
-    } else if (direction === 'next') {
-      nextIndex = (currentIndex + 1) % sessions.length;
-    } else {
-      nextIndex = (currentIndex - 1 + sessions.length) % sessions.length;
-    }
+    const nextIndex = cycleIndex(currentIndex, sessions.length, direction);
+    if (nextIndex === -1) return;
 
     const nextSession = sessions[nextIndex];
 

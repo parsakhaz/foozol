@@ -1,3 +1,33 @@
+/**
+ * Global hotkey registry store using Zustand.
+ *
+ * Manages application-wide keyboard shortcuts with features:
+ * - Centralized registration/unregistration via `register()` and `unregister()`
+ * - Automatic conflict detection with console warnings in dev mode
+ * - Category-based organization for Help dialog grouping
+ * - Search/filter functionality for Command Palette
+ * - Conditional enabling via `enabled` callbacks checked on every keypress
+ * - Platform-aware key normalization (Ctrl/Cmd → 'mod')
+ * - Support for hiding alternative shortcuts from UI via `showInPalette`
+ *
+ * @example
+ * ```tsx
+ * const { register, unregister } = useHotkeyStore();
+ *
+ * useEffect(() => {
+ *   register({
+ *     id: 'my-action',
+ *     label: 'Do Something',
+ *     keys: 'mod+k',
+ *     category: 'navigation',
+ *     action: () => console.log('triggered'),
+ *   });
+ *   return () => unregister('my-action');
+ * }, [register, unregister]);
+ * ```
+ *
+ * @module hotkeyStore
+ */
 import { create } from 'zustand';
 
 export interface HotkeyDefinition {
