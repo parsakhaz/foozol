@@ -1435,6 +1435,84 @@ export function registerGitHandlers(ipcMain: IpcMain, services: AppServices): vo
     }
   });
 
+  ipcMain.handle('sessions:set-upstream', async (_event, sessionId: string, remoteBranch: string) => {
+    try {
+      const session = await sessionManager.getSession(sessionId);
+      if (!session) {
+        return { success: false, error: 'Session not found' };
+      }
+
+      if (!session.worktreePath) {
+        return { success: false, error: 'Session has no worktree path' };
+      }
+
+      const wslContext = getWSLContextForSession(sessionId);
+      const result = await worktreeManager.setUpstream(session.worktreePath, remoteBranch, wslContext);
+
+      // Refresh git status after setting upstream
+      await refreshGitStatusForSession(sessionId);
+
+      return { success: true, data: result };
+    } catch (error: unknown) {
+      console.error('Failed to set upstream:', error);
+      const gitError = error as GitError;
+      return {
+        success: false,
+        error: error instanceof Error ? error.message : 'Failed to set upstream',
+        gitError: {
+          output: gitError.gitOutput || (error instanceof Error ? error.message : String(error)),
+          workingDirectory: gitError.workingDirectory || ''
+        }
+      };
+    }
+  });
+
+  ipcMain.handle('sessions:get-upstream', async (_event, sessionId: string) => {
+    try {
+      const session = await sessionManager.getSession(sessionId);
+      if (!session) {
+        return { success: false, error: 'Session not found' };
+      }
+
+      if (!session.worktreePath) {
+        return { success: false, error: 'Session has no worktree path' };
+      }
+
+      const wslContext = getWSLContextForSession(sessionId);
+      const upstream = await worktreeManager.getUpstream(session.worktreePath, wslContext);
+      return { success: true, data: upstream };
+    } catch (error: unknown) {
+      console.error('Failed to get upstream:', error);
+      return {
+        success: false,
+        error: error instanceof Error ? error.message : 'Failed to get upstream'
+      };
+    }
+  });
+
+  ipcMain.handle('sessions:get-remote-branches', async (_event, sessionId: string) => {
+    try {
+      const session = await sessionManager.getSession(sessionId);
+      if (!session) {
+        return { success: false, error: 'Session not found' };
+      }
+
+      if (!session.worktreePath) {
+        return { success: false, error: 'Session has no worktree path' };
+      }
+
+      const wslContext = getWSLContextForSession(sessionId);
+      const branches = await worktreeManager.getRemoteBranches(session.worktreePath, wslContext);
+      return { success: true, data: branches };
+    } catch (error: unknown) {
+      console.error('Failed to get remote branches:', error);
+      return {
+        success: false,
+        error: error instanceof Error ? error.message : 'Failed to get remote branches'
+      };
+    }
+  });
+
   ipcMain.handle('sessions:git-stage-and-commit', async (_event, sessionId: string, message: string) => {
     try {
       const session = await sessionManager.getSession(sessionId);

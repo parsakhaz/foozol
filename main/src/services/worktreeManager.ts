@@ -1031,6 +1031,44 @@ Co-Authored-By: foozol <noreply@foozol.com>` : commitMessage;
     }
   }
 
+  async setUpstream(worktreePath: string, remoteBranch: string, wslContext?: WSLContext | null): Promise<{ output: string }> {
+    try {
+      const { stdout, stderr } = await execForProject(`git branch --set-upstream-to=${remoteBranch}`, worktreePath, wslContext);
+      const output = stdout || stderr || `Tracking set to ${remoteBranch}`;
+      return { output };
+    } catch (error: unknown) {
+      const err = error as Error & { stderr?: string; stdout?: string };
+      const gitError = new Error(err.message || 'Failed to set upstream') as Error & {
+        gitOutput?: string;
+        workingDirectory?: string;
+      };
+      gitError.gitOutput = err.stderr || err.stdout || err.message || '';
+      gitError.workingDirectory = worktreePath;
+      throw gitError;
+    }
+  }
+
+  async getUpstream(worktreePath: string, wslContext?: WSLContext | null): Promise<string | null> {
+    try {
+      const { stdout } = await execForProject('git rev-parse --abbrev-ref --symbolic-full-name @{u}', worktreePath, wslContext);
+      return stdout.trim() || null;
+    } catch {
+      return null;
+    }
+  }
+
+  async getRemoteBranches(worktreePath: string, wslContext?: WSLContext | null): Promise<string[]> {
+    try {
+      const { stdout } = await execForProject('git branch -r', worktreePath, wslContext);
+      return stdout
+        .split('\n')
+        .map(line => line.trim())
+        .filter(line => line && !line.includes('HEAD ->'));
+    } catch {
+      return [];
+    }
+  }
+
   async gitStageAllAndCommit(worktreePath: string, message: string, wslContext?: WSLContext | null): Promise<{ output: string }> {
     try {
       // Stage all changes including untracked files

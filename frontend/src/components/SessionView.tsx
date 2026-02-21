@@ -29,7 +29,7 @@ import { PanelContainer } from './panels/PanelContainer';
 import { SessionProvider } from '../contexts/SessionContext';
 import { ToolPanel, ToolPanelType, PANEL_CAPABILITIES } from '../../../shared/types/panels';
 import { PanelCreateOptions } from '../types/panelComponents';
-import { Download, Upload, GitMerge, Code2, Terminal, GripHorizontal, ChevronDown, ChevronUp, RefreshCw, Archive, ArchiveRestore, GitCommitHorizontal } from 'lucide-react';
+import { Download, Upload, GitMerge, Code2, Terminal, GripHorizontal, ChevronDown, ChevronUp, RefreshCw, Archive, ArchiveRestore, GitCommitHorizontal, Link } from 'lucide-react';
 import type { Project } from '../types/project';
 import { devLog, renderLog } from '../utils/console';
 
@@ -39,6 +39,9 @@ export const SessionView = memo(() => {
   const [isProjectLoading, setIsProjectLoading] = useState(false);
   const [isMergingProject, setIsMergingProject] = useState(false);
   const [sessionProject, setSessionProject] = useState<Project | null>(null);
+  const [showSetTrackingDialog, setShowSetTrackingDialog] = useState(false);
+  const [remoteBranches, setRemoteBranches] = useState<string[]>([]);
+  const [currentUpstream, setCurrentUpstream] = useState<string | null>(null);
 
   // Get active session by subscribing directly to store state
   // This ensures the component re-renders when git status or other session properties update
@@ -454,6 +457,32 @@ export const SessionView = memo(() => {
 
   const hook = useSessionView(activeSession, terminalRef);
 
+  // Handler to open set tracking dialog
+  const handleOpenSetTracking = async () => {
+    if (!activeSession) return;
+    try {
+      const [branchesResponse, upstreamResponse] = await Promise.all([
+        API.sessions.getRemoteBranches(activeSession.id),
+        API.sessions.getUpstream(activeSession.id)
+      ]);
+      if (branchesResponse.success && branchesResponse.data) {
+        setRemoteBranches(branchesResponse.data);
+      }
+      if (upstreamResponse.success) {
+        setCurrentUpstream(upstreamResponse.data);
+      }
+      setShowSetTrackingDialog(true);
+    } catch (error) {
+      console.error('Failed to fetch remote branches:', error);
+    }
+  };
+
+  const handleSelectUpstream = async (branch: string) => {
+    if (!activeSession) return;
+    setShowSetTrackingDialog(false);
+    await hook.handleSetUpstream(branch);
+  };
+
   // Detail panel state
   const [detailVisible, setDetailVisible] = useState(() => {
     const stored = localStorage.getItem('foozol-detail-panel-visible');
@@ -636,6 +665,15 @@ export const SessionView = memo(() => {
                      (hook.gitCommands?.getSquashAndRebaseToMainCommand ? hook.gitCommands.getSquashAndRebaseToMainCommand() : `Merges all commits to ${hook.gitCommands?.mainBranch || 'main'} (with safety checks)`)
       },
       {
+        id: 'set-tracking',
+        label: 'Set Tracking',
+        icon: Link,
+        onClick: handleOpenSetTracking,
+        disabled: hook.isMerging || activeSession.status === 'running' || activeSession.status === 'initializing',
+        variant: 'default' as const,
+        description: 'Set upstream tracking branch for git pull/push'
+      },
+      {
         id: 'open-ide',
         label: hook.isOpeningIDE ? 'Opening...' : 'Open in IDE',
         icon: Code2,
@@ -645,7 +683,7 @@ export const SessionView = memo(() => {
         description: sessionProject?.open_ide_command ? 'Open the worktree in your default IDE' : 'No IDE command configured'
       }
     ];
-  }, [activeSession, hook.isMerging, hook.gitCommands, hook.hasChangesToRebase, hook.hasStash, hook.handleGitPull, hook.handleGitPush, hook.handleGitFetch, hook.handleGitStash, hook.handleGitStashPop, hook.setShowCommitMessageDialog, hook.setDialogType, hook.handleRebaseMainIntoWorktree, hook.handleSquashAndRebaseToMain, hook.handleOpenIDE, hook.isOpeningIDE, sessionProject?.open_ide_command, activeSession?.gitStatus]);
+  }, [activeSession, hook.isMerging, hook.gitCommands, hook.hasChangesToRebase, hook.hasStash, hook.handleGitPull, hook.handleGitPush, hook.handleGitFetch, hook.handleGitStash, hook.handleGitStashPop, hook.setShowCommitMessageDialog, hook.setDialogType, hook.handleRebaseMainIntoWorktree, hook.handleSquashAndRebaseToMain, hook.handleOpenIDE, hook.isOpeningIDE, sessionProject?.open_ide_command, activeSession?.gitStatus, handleOpenSetTracking]);
   
   // Removed unused variables - now handled by panels
 
@@ -839,6 +877,45 @@ export const SessionView = memo(() => {
         onArchiveEntireFolder={hook.handleArchiveEntireFolder}
         onCancel={hook.handleCancelFolderArchive}
       />
+
+      {/* Set Tracking Dialog */}
+      {showSetTrackingDialog && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50">
+          <div className="bg-bg-primary border border-border-primary rounded-lg shadow-lg p-4 w-80 max-h-96 overflow-hidden flex flex-col">
+            <h3 className="text-lg font-medium text-text-primary mb-2">Set Tracking Branch</h3>
+            {currentUpstream && (
+              <p className="text-sm text-text-secondary mb-3">
+                Currently tracking: <span className="text-text-primary font-mono">{currentUpstream}</span>
+              </p>
+            )}
+            <p className="text-sm text-text-secondary mb-3">Select a remote branch to track:</p>
+            <div className="flex-1 overflow-y-auto space-y-1 mb-4">
+              {remoteBranches.length === 0 ? (
+                <p className="text-sm text-text-tertiary italic">No remote branches found</p>
+              ) : (
+                remoteBranches.map((branch) => (
+                  <button
+                    key={branch}
+                    onClick={() => handleSelectUpstream(branch)}
+                    className={`w-full text-left px-3 py-2 rounded text-sm font-mono hover:bg-bg-secondary transition-colors ${
+                      branch === currentUpstream ? 'bg-bg-secondary text-accent-primary' : 'text-text-primary'
+                    }`}
+                  >
+                    {branch}
+                    {branch === currentUpstream && <span className="ml-2 text-xs">(current)</span>}
+                  </button>
+                ))
+              )}
+            </div>
+            <button
+              onClick={() => setShowSetTrackingDialog(false)}
+              className="w-full px-4 py-2 text-sm text-text-secondary hover:text-text-primary border border-border-primary rounded hover:bg-bg-secondary transition-colors"
+            >
+              Cancel
+            </button>
+          </div>
+        </div>
+      )}
 
     </div>
   );
