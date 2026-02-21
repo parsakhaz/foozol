@@ -55,7 +55,7 @@ export const PanelTabBar: React.FC<PanelTabBarProps> = memo(({
   const [showCustomInput, setShowCustomInput] = useState(false);
   const [customCommand, setCustomCommand] = useState('');
   const customInputRef = useRef<HTMLInputElement>(null);
-  const [_focusedDropdownIndex, setFocusedDropdownIndex] = useState(-1);
+  const [, setFocusedDropdownIndex] = useState(-1);
   const dropdownItemsRef = useRef<(HTMLButtonElement | HTMLInputElement | null)[]>([]);
 
   const customCommands = config?.customCommands ?? [];
