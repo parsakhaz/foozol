@@ -238,6 +238,3 @@ export class ConfigManager extends EventEmitter {
     return validPrefs.includes(pref) ? pref : 'auto';
   }
 }
-
-// Singleton instance for services that need direct access
-export const configManager = new ConfigManager();

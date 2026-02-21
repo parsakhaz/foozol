@@ -1,12 +1,18 @@
-import { Sun, Moon, ChevronUp, ChevronDown } from 'lucide-react';
+import { useState, useEffect } from 'react';
+import { Sun, Moon, ChevronUp, ChevronDown, Terminal } from 'lucide-react';
 import { useTheme } from '../contexts/ThemeContext';
 import { useConfigStore } from '../stores/configStore';
 import { useSessionStore } from '../stores/sessionStore';
+import { API } from '../utils/api';
 
 export function HomePage() {
   const { theme, toggleTheme } = useTheme();
   const { config, updateConfig } = useConfigStore();
   const { sessions, setActiveSession } = useSessionStore();
+
+  const [platform, setPlatform] = useState<string>('');
+  const [availableShells, setAvailableShells] = useState<Array<{id: string; name: string; path: string}>>([]);
+  const [preferredShell, setPreferredShell] = useState<string>('auto');
 
   const uiScale = config?.uiScale ?? 1.0;
 
@@ -15,11 +21,36 @@ export function HomePage() {
     s => s.status === 'running' || s.status === 'waiting'
   );
 
+  // Fetch platform and available shells on mount
+  useEffect(() => {
+    window.electronAPI.getPlatform().then(async (p) => {
+      setPlatform(p);
+      if (p === 'win32') {
+        const shellsResponse = await API.config.getAvailableShells();
+        if (shellsResponse.success) {
+          setAvailableShells(shellsResponse.data);
+        }
+      }
+    });
+  }, []);
+
+  // Sync preferredShell with config
+  useEffect(() => {
+    if (config?.preferredShell) {
+      setPreferredShell(config.preferredShell);
+    }
+  }, [config?.preferredShell]);
+
   const handleScaleChange = async (delta: number) => {
     const newScale = Math.round((uiScale + delta) * 10) / 10; // Avoid floating point issues
     if (newScale >= 0.8 && newScale <= 1.5) {
       await updateConfig({ uiScale: newScale });
     }
+  };
+
+  const handleShellChange = async (shell: string) => {
+    setPreferredShell(shell);
+    await updateConfig({ preferredShell: shell as 'auto' | 'gitbash' | 'powershell' | 'pwsh' | 'cmd' });
   };
 
   return (
@@ -63,6 +94,26 @@ export function HomePage() {
               </button>
             </div>
           </div>
+
+          {/* Terminal Shell (Windows only) */}
+          {platform === 'win32' && (
+            <div className="flex items-center justify-between p-4 bg-surface-secondary rounded-lg">
+              <div className="flex items-center gap-2">
+                <Terminal className="w-4 h-4 text-text-secondary" />
+                <span className="text-text-primary">Terminal Shell</span>
+              </div>
+              <select
+                value={preferredShell}
+                onChange={(e) => handleShellChange(e.target.value)}
+                className="px-3 py-1.5 rounded-md border border-border-primary bg-surface-secondary text-text-primary text-sm focus:ring-2 focus:ring-interactive focus:border-interactive"
+              >
+                <option value="auto">Auto (Git Bash)</option>
+                {availableShells.map(shell => (
+                  <option key={shell.id} value={shell.id}>{shell.name}</option>
+                ))}
+              </select>
+            </div>
+          )}
         </div>
 
         {/* Active Sessions */}

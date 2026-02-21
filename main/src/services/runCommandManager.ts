@@ -8,7 +8,7 @@ import { ShellDetector } from '../utils/shellDetector';
 import * as os from 'os';
 import { exec } from 'child_process';
 import { promisify } from 'util';
-import { configManager } from './configManager';
+import { configManager } from '../index';
 
 interface RunProcess {
   process: pty.IPty;

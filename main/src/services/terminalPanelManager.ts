@@ -1,14 +1,13 @@
 import * as pty from '@lydell/node-pty';
 import { ToolPanel, TerminalPanelState, PanelEventType } from '../../../shared/types/panels';
 import { panelManager } from './panelManager';
-import { mainWindow } from '../index';
+import { mainWindow, configManager } from '../index';
 import * as os from 'os';
 import * as path from 'path';
 import { getShellPath } from '../utils/shellPath';
 import { ShellDetector } from '../utils/shellDetector';
 import type { AnalyticsManager } from './analyticsManager';
 import { getWSLShellSpawn, WSLContext } from '../utils/wslUtils';
-import { configManager } from './configManager';
 
 const HIGH_WATERMARK = 100_000; // 100KB — pause PTY when pending exceeds this
 const LOW_WATERMARK = 10_000;   // 10KB — resume PTY when pending drops below this
