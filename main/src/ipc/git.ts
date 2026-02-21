@@ -1770,14 +1770,16 @@ export function registerGitHandlers(ipcMain: IpcMain, services: AppServices): vo
       // Parse remote output for github.com
       const lines = stdout.split('\n');
       for (const line of lines) {
-        // Match SSH format: git@github.com:org/repo.git
-        const sshMatch = line.match(/git@github\.com:([^/]+\/[^.\s]+)(?:\.git)?/);
+        // Match SSH format: git@github.com:org/repo.git (repo can contain dots like repo.name)
+        const sshMatch = line.match(/git@github\.com:([^/]+\/[^\s]+?)(?:\.git)?(?:\s|$)/);
         if (sshMatch) {
-          return { success: true, data: `https://github.com/${sshMatch[1]}` };
+          // Remove .git suffix if present
+          const repo = sshMatch[1].replace(/\.git$/, '');
+          return { success: true, data: `https://github.com/${repo}` };
         }
 
         // Match HTTPS format: https://github.com/org/repo.git or https://github.com/org/repo
-        const httpsMatch = line.match(/https:\/\/github\.com\/([^/]+\/[^.\s]+)/);
+        const httpsMatch = line.match(/https:\/\/github\.com\/([^/]+\/[^\s]+?)(?:\.git)?(?:\s|$)/);
         if (httpsMatch) {
           // Remove .git suffix if present
           const repo = httpsMatch[1].replace(/\.git$/, '');
