@@ -1745,15 +1745,52 @@ export function registerGitHandlers(ipcMain: IpcMain, services: AppServices): vo
       // Get all sessions for the project
       const sessions = await sessionManager.getAllSessions();
       const projectSessions = sessions.filter(s => s.projectId === projectId && !s.archived);
-      
+
       // Cancel git status operations for all project sessions
       const sessionIds = projectSessions.map(s => s.id);
       gitStatusManager.cancelMultipleGitStatus(sessionIds);
-      
+
       return { success: true };
     } catch (error) {
       console.error('Error cancelling git status:', error);
       return { success: false, error: (error as Error).message };
+    }
+  });
+
+  ipcMain.handle('git:get-github-remote', async (_event, sessionId: string) => {
+    try {
+      const session = sessionManager.getSession(sessionId);
+      if (!session?.worktreePath) {
+        return { success: true, data: null };
+      }
+
+      const wslContext = getWSLContextForSession(sessionId);
+      const stdout = gitExecSync('git remote -v', session.worktreePath, wslContext);
+
+      // Parse remote output for github.com
+      const lines = stdout.split('\n');
+      for (const line of lines) {
+        // Match SSH format: git@github.com:org/repo.git (repo can contain dots like repo.name)
+        const sshMatch = line.match(/git@github\.com:([^/]+\/[^\s]+?)(?:\.git)?(?:\s|$)/);
+        if (sshMatch) {
+          // Remove .git suffix if present
+          const repo = sshMatch[1].replace(/\.git$/, '');
+          return { success: true, data: `https://github.com/${repo}` };
+        }
+
+        // Match HTTPS format: https://github.com/org/repo.git or https://github.com/org/repo
+        const httpsMatch = line.match(/https:\/\/github\.com\/([^/]+\/[^\s]+?)(?:\.git)?(?:\s|$)/);
+        if (httpsMatch) {
+          // Remove .git suffix if present
+          const repo = httpsMatch[1].replace(/\.git$/, '');
+          return { success: true, data: `https://github.com/${repo}` };
+        }
+      }
+
+      return { success: true, data: null };
+    } catch (error) {
+      console.error('Failed to get GitHub remote:', error);
+      return { success: true, data: null }; // Silent fail, just no git links
     }
   });
 } 

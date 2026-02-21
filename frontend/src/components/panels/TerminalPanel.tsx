@@ -2,13 +2,18 @@ import React, { useRef, useEffect, useState, useCallback } from 'react';
 import { Terminal } from '@xterm/xterm';
 import { FitAddon } from '@xterm/addon-fit';
 import type { WebglAddon } from '@xterm/addon-webgl';
+import type { WebLinksAddon } from '@xterm/addon-web-links';
 import { useSession } from '../../contexts/SessionContext';
 import { useTheme } from '../../contexts/ThemeContext';
 import { TerminalPanelProps } from '../../types/panelComponents';
 import { renderLog, devLog } from '../../utils/console';
 import { getTerminalTheme } from '../../utils/terminalTheme';
 import { throttle } from '../../utils/performanceUtils';
-import { RefreshCw } from 'lucide-react';
+import { RefreshCw, FileEdit, FolderOpen } from 'lucide-react';
+import { useTerminalLinks } from '../terminal/hooks/useTerminalLinks';
+import { TerminalLinkTooltip } from '../terminal/TerminalLinkTooltip';
+import { TerminalPopover, PopoverButton } from '../terminal/TerminalPopover';
+import { SelectionPopover } from '../terminal/SelectionPopover';
 import '@xterm/xterm/css/xterm.css';
 
 // Type for terminal state restoration
@@ -26,6 +31,7 @@ export const TerminalPanel: React.FC<TerminalPanelProps> = React.memo(({ panel, 
   const xtermRef = useRef<Terminal | null>(null);
   const fitAddonRef = useRef<FitAddon | null>(null);
   const webglAddonRef = useRef<WebglAddon | null>(null);
+  const webLinksAddonRef = useRef<WebLinksAddon | null>(null);
   const [isInitialized, setIsInitialized] = useState(false);
   const [initError, setInitError] = useState<string | null>(null);
   const [isRefreshing, setIsRefreshing] = useState(false);
@@ -41,6 +47,22 @@ export const TerminalPanel: React.FC<TerminalPanelProps> = React.memo(({ panel, 
   } else {
     devLog.error('[TerminalPanel] No session context available');
   }
+
+  // Terminal link handling hook
+  const {
+    onMouseMove,
+    tooltip,
+    filePopover,
+    selectionPopover,
+    handleOpenInEditor,
+    handleShowInExplorer,
+    closeTooltip,
+    closeFilePopover,
+    closeSelectionPopover,
+  } = useTerminalLinks(xtermRef.current, {
+    workingDirectory: workingDirectory || '',
+    sessionId: sessionId || panel.sessionId,
+  });
 
   // Initialize terminal only once when component first mounts
   // Keep it alive even when switching sessions
@@ -166,6 +188,26 @@ export const TerminalPanel: React.FC<TerminalPanelProps> = React.memo(({ panel, 
           } catch (e) {
             console.warn('[TerminalPanel] WebGL renderer failed for panel', panel.id, ', using DOM renderer:', e);
             webglAddonRef.current = null;
+          }
+
+          // Load WebLinksAddon for clickable URLs
+          try {
+            const { WebLinksAddon: WebLinksAddonImpl } = await import('@xterm/addon-web-links');
+            if (!disposed) {
+              const isMac = navigator.platform.toUpperCase().includes('MAC');
+              const webLinksAddon = new WebLinksAddonImpl((event, uri) => {
+                // Only open link if Ctrl (Windows/Linux) or Cmd (Mac) is held
+                if (isMac ? event.metaKey : event.ctrlKey) {
+                  window.electronAPI.openExternal(uri);
+                }
+              });
+              terminal.loadAddon(webLinksAddon);
+              webLinksAddonRef.current = webLinksAddon;
+              console.log('[TerminalPanel] WebLinksAddon loaded for panel', panel.id);
+            }
+          } catch (e) {
+            console.warn('[TerminalPanel] WebLinksAddon failed to load for panel', panel.id, ':', e);
+            webLinksAddonRef.current = null;
           }
 
           xtermRef.current = terminal;
@@ -296,6 +338,12 @@ export const TerminalPanel: React.FC<TerminalPanelProps> = React.memo(({ panel, 
         webglAddonRef.current = null;
       }
 
+      // Dispose WebLinks addon
+      if (webLinksAddonRef.current) {
+        try { webLinksAddonRef.current.dispose(); } catch { /* ignore */ }
+        webLinksAddonRef.current = null;
+      }
+
       // Dispose XTerm instance only on final unmount
       if (xtermRef.current) {
         try {
@@ -406,7 +454,7 @@ export const TerminalPanel: React.FC<TerminalPanelProps> = React.memo(({ panel, 
 
   // Always render the terminal div to keep XTerm instance alive
   return (
-    <div className="h-full w-full relative">
+    <div className="h-full w-full relative" onMouseMove={onMouseMove}>
       <div ref={terminalRef} className="h-full w-full" />
 
       {/* Refresh button - helps recover from stuck terminals */}
@@ -426,6 +474,44 @@ export const TerminalPanel: React.FC<TerminalPanelProps> = React.memo(({ panel, 
           <div className="text-text-secondary">Initializing terminal...</div>
         </div>
       )}
+
+      {/* Terminal link overlays */}
+      <TerminalLinkTooltip
+        visible={tooltip.visible}
+        x={tooltip.x}
+        y={tooltip.y}
+        linkText={tooltip.text}
+        hint={tooltip.hint}
+      />
+
+      <TerminalPopover
+        visible={filePopover.visible}
+        x={filePopover.x}
+        y={filePopover.y}
+        onClose={closeFilePopover}
+      >
+        <PopoverButton onClick={handleOpenInEditor}>
+          <span className="flex items-center gap-2">
+            <FileEdit className="w-4 h-4" />
+            Open in Editor
+          </span>
+        </PopoverButton>
+        <PopoverButton onClick={handleShowInExplorer}>
+          <span className="flex items-center gap-2">
+            <FolderOpen className="w-4 h-4" />
+            Show in Explorer
+          </span>
+        </PopoverButton>
+      </TerminalPopover>
+
+      <SelectionPopover
+        visible={selectionPopover.visible}
+        x={selectionPopover.x}
+        y={selectionPopover.y}
+        text={selectionPopover.text}
+        workingDirectory={workingDirectory}
+        onClose={closeSelectionPopover}
+      />
     </div>
   );
 });
