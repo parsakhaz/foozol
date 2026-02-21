@@ -231,4 +231,15 @@ export class ConfigManager extends EventEmitter {
     this.config.analytics.distinctId = distinctId;
     await this.saveConfig();
   }
+
+  /**
+   * Get the user's preferred shell for terminal sessions.
+   * Validates the preference against allowed values and returns 'auto' if invalid.
+   * @returns One of: 'auto', 'gitbash', 'powershell', 'pwsh', 'cmd'
+   */
+  getPreferredShell(): string {
+    const pref = this.config.preferredShell || 'auto';
+    const validPrefs = ['auto', 'gitbash', 'powershell', 'pwsh', 'cmd'];
+    return validPrefs.includes(pref) ? pref : 'auto';
+  }
 }

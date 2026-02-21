@@ -188,6 +188,7 @@ interface ElectronAPI {
     update: (updates: Record<string, unknown>) => Promise<IPCResponse>;
     getSessionPreferences: () => Promise<IPCResponse>;
     updateSessionPreferences: (preferences: SessionCreationPreferences) => Promise<IPCResponse>;
+    getAvailableShells: () => Promise<IPCResponse>;
   };
 
   // Prompts

@@ -18,7 +18,8 @@ import {
   BarChart3,
   Activity,
   ChevronUp,
-  ChevronDown
+  ChevronDown,
+  Terminal
 } from 'lucide-react';
 import { Input, Textarea, Checkbox } from './ui/Input';
 import { Button } from './ui/Button';
@@ -58,19 +59,23 @@ export function Settings({ isOpen, onClose }: SettingsProps) {
   const [activeTab, setActiveTab] = useState<'general' | 'notifications' | 'analytics'>('general');
   const [analyticsEnabled, setAnalyticsEnabled] = useState(true);
   const [previousAnalyticsEnabled, setPreviousAnalyticsEnabled] = useState(true);
+  const [preferredShell, setPreferredShell] = useState<string>('auto');
+  const [availableShells, setAvailableShells] = useState<Array<{id: string; name: string; path: string}>>([]);
   const { updateSettings } = useNotifications();
   const { theme, toggleTheme } = useTheme();
   const { fetchConfig: refreshConfigStore } = useConfigStore();
 
   useEffect(() => {
     if (isOpen) {
-      fetchConfig();
-      // Get platform for PATH help text
-      window.electronAPI.getPlatform().then(setPlatform);
+      // Get platform first, then fetch config (needed for Windows shell detection)
+      window.electronAPI.getPlatform().then((p) => {
+        setPlatform(p);
+        fetchConfig(p);
+      });
     }
   }, [isOpen]);
 
-  const fetchConfig = async () => {
+  const fetchConfig = async (currentPlatform?: string) => {
     try {
       const response = await API.config.get();
       if (!response.success) throw new Error(response.error || 'Failed to fetch config');
@@ -86,11 +91,11 @@ export function Settings({ isOpen, onClose }: SettingsProps) {
       setEnableCommitFooter(data.enableCommitFooter !== false); // Default to true
       setDisableAutoContext(data.disableAutoContext || false);
       setUiScale(data.uiScale || 1.0);
-      
+
       // Load additional paths
       const paths = data.additionalPaths || [];
       setAdditionalPathsText(paths.join('\n'));
-      
+
       // Load notification settings
       if (data.notifications) {
         setNotificationSettings(data.notifications);
@@ -104,6 +109,16 @@ export function Settings({ isOpen, onClose }: SettingsProps) {
         setAnalyticsEnabled(enabled);
         setPreviousAnalyticsEnabled(enabled);
       }
+
+      // Fetch available shells on Windows
+      const platformToCheck = currentPlatform || platform;
+      if (platformToCheck === 'win32') {
+        const shellsResponse = await API.config.getAvailableShells();
+        if (shellsResponse.success) {
+          setAvailableShells(shellsResponse.data);
+        }
+      }
+      setPreferredShell(data.preferredShell || 'auto');
     } catch (err) {
       setError('Failed to load configuration');
     }
@@ -153,7 +168,8 @@ export function Settings({ isOpen, onClose }: SettingsProps) {
         notifications: notificationSettings,
         analytics: {
           enabled: analyticsEnabled
-        }
+        },
+        preferredShell
       });
 
       if (!response.success) {
@@ -547,6 +563,25 @@ export function Settings({ isOpen, onClose }: SettingsProps) {
                   }
                 />
               </SettingsSection>
+
+              {platform === 'win32' && (
+                <SettingsSection
+                  title="Terminal Shell"
+                  description="Default shell for terminal panels"
+                  icon={<Terminal className="w-4 h-4" />}
+                >
+                  <select
+                    value={preferredShell}
+                    onChange={(e) => setPreferredShell(e.target.value)}
+                    className="w-full px-3 py-2 rounded-lg border border-border-primary bg-surface-secondary text-text-primary focus:ring-2 focus:ring-interactive focus:border-interactive"
+                  >
+                    <option value="auto">Auto-detect (Git Bash preferred)</option>
+                    {availableShells.map(shell => (
+                      <option key={shell.id} value={shell.id}>{shell.name}</option>
+                    ))}
+                  </select>
+                </SettingsSection>
+              )}
 
               <SettingsSection
                 title="Custom Claude Installation"

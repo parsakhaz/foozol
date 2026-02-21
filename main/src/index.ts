@@ -74,8 +74,8 @@ function setAppTitle() {
 }
 let taskQueue: TaskQueue | null = null;
 
-// Service instances
-let configManager: ConfigManager;
+// Service instances (configManager exported for shell preference access)
+export let configManager: ConfigManager;
 let logger: Logger;
 let sessionManager: SessionManager;
 let worktreeManager: WorktreeManager;

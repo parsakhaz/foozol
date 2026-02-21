@@ -1,7 +1,7 @@
 import * as pty from '@lydell/node-pty';
 import { ToolPanel, TerminalPanelState, PanelEventType } from '../../../shared/types/panels';
 import { panelManager } from './panelManager';
-import { mainWindow } from '../index';
+import { mainWindow, configManager } from '../index';
 import * as os from 'os';
 import * as path from 'path';
 import { getShellPath } from '../utils/shellPath';
@@ -139,7 +139,8 @@ export class TerminalPanelManager {
       shellArgs = wslShell.args;
       spawnCwd = undefined; // WSL handles cwd
     } else {
-      const shellInfo = ShellDetector.getDefaultShell();
+      const preferredShell = configManager.getPreferredShell();
+      const shellInfo = ShellDetector.getDefaultShell(preferredShell);
       shellPath = shellInfo.path;
       shellArgs = shellInfo.args || [];
     }
